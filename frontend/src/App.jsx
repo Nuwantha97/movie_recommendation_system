@@ -148,7 +148,7 @@ export default function App() {
   }, [state.status, state.requestId, state.total, state.body, state.page, state.pages]);
 
   function navigateToMovie(movieItem) {
-    const id = movieItem.movie?.id ?? movieItem.movie_id ?? movieItem.id;
+    const id = movieItem.movie?.id ?? movieItem.movie_id ?? item.id;
     if (!id) return;
 
     saveMovieToCache(id, movieItem);
@@ -178,7 +178,15 @@ export default function App() {
       }
       return {
         ...q,
-        movies: [...q.movies, { id: movie.id, title: movie.title || "Movie" }],
+        movies: [
+          ...q.movies,
+          {
+            id: movie.id,
+            title: movie.title || "Movie",
+            year: movie.year ?? movie.release_year ?? null,
+            poster_path: movie.poster_path ?? movie.movie?.poster_path ?? null,
+          },
+        ],
       };
     });
     navigateToHome();

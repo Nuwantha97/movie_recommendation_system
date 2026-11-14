@@ -145,7 +145,14 @@ export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie
           <button
             type="button"
             className="btn-seed"
-            onClick={() => onSeedMovie({ id: movieData?.id ?? movieId, title })}
+            onClick={() =>
+              onSeedMovie({
+                id: movieData?.id ?? movieId,
+                title,
+                year,
+                poster_path: posterPath,
+              })
+            }
             title="Use this movie as an input seed in movie finder"
           >
             <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

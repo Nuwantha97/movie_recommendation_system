@@ -1,5 +1,6 @@
 import AsyncCombobox from "./AsyncCombobox";
 import ChipList from "./ChipList";
+import MoviePoster from "./MoviePoster";
 import { searchLanguages, searchMovies, searchTags } from "../api";
 import { GENRES, TAG_LABELS, languageName } from "../constants";
 import { canSubmit, dateRangeInvalid, getPlotTextError } from "../query";
@@ -7,7 +8,7 @@ import { canSubmit, dateRangeInvalid, getPlotTextError } from "../query";
 const tagKey = (t) => `${t.tag_type}:${t.name}`;
 const tagName = (t) => (t.tag_type === "spoken_languages" ? languageName(t.name) : t.name);
 const tagLabel = (t) => `${TAG_LABELS[t.tag_type] ?? t.tag_type}: ${tagName(t)}`;
-const movieYear = (m) => m.release_year ?? m.year ?? "";
+const movieYear = (m) => m.year ?? m.release_year ?? "";
 
 function toggle(list, value) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -60,6 +61,12 @@ export default function QueryPanel({
   const tagPct = Math.round(query.tagWeight * 100);
   const badRange = dateRangeInvalid(query);
 
+  const activeFiltersCount =
+    (query.languages?.length || 0) +
+    (query.genres?.length || 0) +
+    (query.dateFrom ? 1 : 0) +
+    (query.dateTo ? 1 : 0);
+
   return (
     <form
       className="panel"
@@ -69,27 +76,53 @@ export default function QueryPanel({
       }}
     >
       <div className="field">
-        <label>Movies you like</label>
+        <label htmlFor="movie-search-input">Movies you like</label>
         <AsyncCombobox
+          id="movie-search-input"
           label="Search movies"
           placeholder="Search by title"
+          minChars={3}
           fetchOptions={searchMovies}
           onSelect={(m) => set({ movies: [...query.movies, m] })}
           getKey={(m) => String(m.id)}
           isSelected={(m) => query.movies.some((x) => x.id === m.id)}
           renderOption={(m) => (
-            <>
-              <span className="opt-title">{m.title}</span>
-              <span className="opt-meta">
-                {[movieYear(m), m.director].filter(Boolean).join(", ")}
-              </span>
-            </>
+            <div className="combo-option-content">
+              <MoviePoster
+                path={m.poster_path}
+                title={m.title}
+                size="w92"
+                className="thumb"
+                width={40}
+                height={60}
+              />
+              <div className="opt-text">
+                <span className="opt-title">{m.title}</span>
+                {movieYear(m) ? <span className="opt-meta">({movieYear(m)})</span> : null}
+              </div>
+            </div>
           )}
         />
         <ChipList
           items={query.movies}
           getKey={(m) => String(m.id)}
           getLabel={(m) => (movieYear(m) ? `${m.title} (${movieYear(m)})` : m.title)}
+          renderLabel={(m) => (
+            <>
+              <MoviePoster
+                path={m.poster_path}
+                title={m.title}
+                size="w92"
+                className="chip-poster"
+                width={24}
+                height={36}
+              />
+              <span className="chip-meta">
+                <span className="chip-title">{m.title}</span>
+                {movieYear(m) ? <span className="chip-year">({movieYear(m)})</span> : null}
+              </span>
+            </>
+          )}
           onRemove={(m) => set({ movies: query.movies.filter((x) => x.id !== m.id) })}
         />
       </div>
@@ -123,8 +156,9 @@ export default function QueryPanel({
       </div>
 
       <div className="field">
-        <label>People, keywords and more</label>
+        <label htmlFor="tag-search-input">People, keywords and more</label>
         <AsyncCombobox
+          id="tag-search-input"
           label="Search tags"
           placeholder="Director, cast, keyword, country"
           fetchOptions={searchTags}
@@ -148,60 +182,85 @@ export default function QueryPanel({
 
       <div className="divider" />
 
-      <p className="note">
-        Language, genre and date are hard filters. Tags only nudge similarity, so they do not
-        guarantee a person's films appear.
-      </p>
+      {/* Collapsible Filters Section for Tablet & Mobile (stays expanded on Desktop) */}
+      <details className="filters-details">
+        <summary className="filters-summary">
+          <div className="filters-summary-left">
+            <span>Filters</span>
+            {activeFiltersCount > 0 && (
+              <span className="filters-badge" aria-label={`${activeFiltersCount} filters active`}>
+                {activeFiltersCount}
+              </span>
+            )}
+          </div>
+          <span className="note">Language, genres, dates</span>
+        </summary>
+        <div className="filters-content">
+          <p className="note">
+            Language, genre and date are hard filters. Tags only nudge similarity, so they do not
+            guarantee a person's films appear.
+          </p>
 
-      <div className="field">
-        <label>Original language</label>
-        <AsyncCombobox
-          label="Search original language"
-          placeholder="Search by name or code, e.g. tamil or ta"
-          fetchOptions={searchLanguages}
-          onSelect={(l) => set({ languages: [...query.languages, l.name] })}
-          getKey={(l) => l.name}
-          isSelected={(l) => query.languages.includes(l.name)}
-          renderOption={(l) => (
-            <>
-              <span className="opt-title">{languageName(l.name)}</span>
-              <span className="opt-meta">{l.name}</span>
-            </>
-          )}
-        />
-        <ChipList
-          items={query.languages}
-          getKey={(code) => code}
-          getLabel={(code) => `${languageName(code)} (${code})`}
-          onRemove={(code) => set({ languages: query.languages.filter((c) => c !== code) })}
-        />
-      </div>
+          <div className="field">
+            <label htmlFor="lang-search-input">Original language</label>
+            <AsyncCombobox
+              id="lang-search-input"
+              label="Search original language"
+              placeholder="Search by name or code, e.g. tamil or ta"
+              fetchOptions={searchLanguages}
+              onSelect={(l) => set({ languages: [...query.languages, l.name] })}
+              getKey={(l) => l.name}
+              isSelected={(l) => query.languages.includes(l.name)}
+              renderOption={(l) => (
+                <>
+                  <span className="opt-title">{languageName(l.name)}</span>
+                  <span className="opt-meta">{l.name}</span>
+                </>
+              )}
+            />
+            <ChipList
+              items={query.languages}
+              getKey={(code) => code}
+              getLabel={(code) => `${languageName(code)} (${code})`}
+              onRemove={(code) => set({ languages: query.languages.filter((c) => c !== code) })}
+            />
+          </div>
 
-      <ToggleGroup
-        legend="Genres (any of)"
-        options={GENRES}
-        selected={query.genres}
-        onToggle={(v) => set({ genres: toggle(query.genres, v) })}
-      />
+          <ToggleGroup
+            legend="Genres (any of)"
+            options={GENRES}
+            selected={query.genres}
+            onToggle={(v) => set({ genres: toggle(query.genres, v) })}
+          />
 
-      <fieldset className="field">
-        <legend>Release date</legend>
-        <div className="dates">
-          <label>
-            <span>From</span>
-            <input type="date" value={query.dateFrom} onChange={(e) => set({ dateFrom: e.target.value })} />
-          </label>
-          <label>
-            <span>To</span>
-            <input type="date" value={query.dateTo} onChange={(e) => set({ dateTo: e.target.value })} />
-          </label>
+          <fieldset className="field">
+            <legend>Release date</legend>
+            <div className="dates">
+              <label>
+                <span>From</span>
+                <input
+                  type="date"
+                  value={query.dateFrom}
+                  onChange={(e) => set({ dateFrom: e.target.value })}
+                />
+              </label>
+              <label>
+                <span>To</span>
+                <input
+                  type="date"
+                  value={query.dateTo}
+                  onChange={(e) => set({ dateTo: e.target.value })}
+                />
+              </label>
+            </div>
+            {badRange ? (
+              <p className="note error">The start date must be on or before the end date.</p>
+            ) : (
+              <p className="note">Movies with no release date are left out when you set a date.</p>
+            )}
+          </fieldset>
         </div>
-        {badRange ? (
-          <p className="note error">The start date must be on or before the end date.</p>
-        ) : (
-          <p className="note">Movies with no release date are left out when you set a date.</p>
-        )}
-      </fieldset>
+      </details>
 
       <div className="divider" />
 
@@ -215,9 +274,18 @@ export default function QueryPanel({
           step="0.05"
           value={noPlotQuery ? 1 : query.tagWeight}
           disabled={noPlotQuery}
+          aria-label="Match on plot or tags"
+          aria-valuemin="0"
+          aria-valuemax="1"
+          aria-valuenow={noPlotQuery ? 1 : query.tagWeight}
+          aria-valuetext={
+            noPlotQuery
+              ? "Tags only"
+              : `${tagPct}% tags, ${100 - tagPct}% plot`
+          }
           onChange={(e) => set({ tagWeight: Number(e.target.value) })}
         />
-        <div className="slider-labels">
+        <div className="slider-labels" aria-hidden="true">
           <span>Plot</span>
           <span>Tags</span>
         </div>
