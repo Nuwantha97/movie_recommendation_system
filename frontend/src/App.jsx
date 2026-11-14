@@ -298,6 +298,29 @@ export default function App() {
     }
   }
 
+  function clearResults() {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setState({
+      status: "idle",
+      error: "",
+      requestId: null,
+      total: 0,
+      body: null,
+      page: 1,
+      pages: {},
+      pageLoading: false,
+      explaining: {},
+    });
+    try {
+      sessionStorage.removeItem(RESULTS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function clearFilters() {
     setQuery((q) => ({ ...q, languages: [], genres: [], dateFrom: "", dateTo: "" }));
     setState({
@@ -380,6 +403,7 @@ export default function App() {
               setQuery={setQuery}
               onSubmit={submit}
               loading={state.status === "loading"}
+              onClearResults={clearResults}
               onClearFilters={clearFilters}
               onRetry={submit}
               onSelectMovie={navigateToMovie}
