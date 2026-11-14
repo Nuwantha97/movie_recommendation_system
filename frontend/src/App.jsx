@@ -377,6 +377,9 @@ export default function App() {
             <Results
               state={state}
               query={query}
+              setQuery={setQuery}
+              onSubmit={submit}
+              loading={state.status === "loading"}
               onClearFilters={clearFilters}
               onRetry={submit}
               onSelectMovie={navigateToMovie}

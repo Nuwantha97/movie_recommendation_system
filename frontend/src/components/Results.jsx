@@ -2,6 +2,7 @@ import { hasFilters } from "../query";
 import MoviePoster from "./MoviePoster";
 import ScoreBar from "./ScoreBar";
 import Pagination from "./Pagination";
+import HeroExplore from "./HeroExplore";
 
 const tagName = (t) => (typeof t === "string" ? t : t?.name ?? "");
 
@@ -91,6 +92,9 @@ function Skeleton() {
 export default function Results({
   state,
   query,
+  setQuery,
+  onSubmit,
+  loading,
   onClearFilters,
   onRetry,
   onSelectMovie,
@@ -101,6 +105,16 @@ export default function Results({
   const totalPages = Math.ceil((total || 0) / 20);
 
   if (status === "idle") {
+    if (setQuery) {
+      return (
+        <HeroExplore
+          query={query}
+          setQuery={setQuery}
+          onSubmit={onSubmit}
+          loading={loading}
+        />
+      );
+    }
     return (
       <div className="empty">
         <h2>Find something you have not seen</h2>
