@@ -12,10 +12,11 @@ class MovieHit(BaseModel):
     id: int
     title: str
     year: int | None = None
+    poster_path: str | None = None
 
 
 MOVIE_SEARCH_SQL = """
-SELECT id, title, EXTRACT(YEAR FROM release_date)::int AS year
+SELECT id, title, EXTRACT(YEAR FROM release_date)::int AS year, poster_path
 FROM movies
 WHERE lower(title) LIKE %(contains)s
 ORDER BY (lower(title) = %(q)s) DESC,                 -- exact title match
