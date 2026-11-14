@@ -9,7 +9,7 @@ export default function Footer({ hasStickySubmit = false }) {
       <div className="footer-inner">
         <div className="footer-brand">
           <div className="footer-brand-title">
-            <Logo size={20} />
+            <Logo size={26} className="footer-logo" />
             <strong>DualLens</strong>
           </div>
           <p className="footer-tagline">

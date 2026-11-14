@@ -321,24 +321,34 @@ export default function App() {
   return (
     <div className="app">
       <header className="site-header">
-        <h1>
-          <a
-            href="/"
-            className="brand-link"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateToHome();
-            }}
-          >
-            <Logo size={36} />
-            <span className="brand-wordmark">DualLens</span>
-          </a>
-        </h1>
-        <p className="brand-subtitle">Dual-Signal Movie Recommendation System</p>
+        <div className="header-inner">
+          <div className="header-brand-group">
+            <h1>
+              <a
+                href="/"
+                className="brand-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateToHome();
+                }}
+              >
+                <Logo size={40} />
+                <div className="brand-titles">
+                  <span className="brand-wordmark">DualLens</span>
+                  <span className="brand-subtitle">Dual-Signal Movie Recommendation System</span>
+                </div>
+              </a>
+            </h1>
+          </div>
+          <div className="header-status" aria-label="System status: Active">
+            <span className="status-dot" aria-hidden="true" />
+            <span className="status-label">Dual-Signal AI Engine</span>
+          </div>
+        </div>
       </header>
 
       {route.page === "movie" ? (
-        <main>
+        <main className="layout-detail">
           <MovieDetail
             key={route.movieId}
             movieId={route.movieId}

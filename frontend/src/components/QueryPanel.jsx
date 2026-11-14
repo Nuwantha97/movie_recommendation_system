@@ -149,6 +149,7 @@ export default function QueryPanel({
         </div>
         <textarea
           id="plot-text"
+          name="plotText"
           rows={3}
           placeholder="e.g. A retired detective is drawn into one last case when an enigmatic code surfaces..."
           value={plotText}
@@ -271,17 +272,21 @@ export default function QueryPanel({
           <fieldset className="field">
             <legend>Release date</legend>
             <div className="dates">
-              <label>
+              <label htmlFor="date-from">
                 <span>From</span>
                 <input
+                  id="date-from"
+                  name="dateFrom"
                   type="date"
                   value={query.dateFrom}
                   onChange={(e) => set({ dateFrom: e.target.value })}
                 />
               </label>
-              <label>
+              <label htmlFor="date-to">
                 <span>To</span>
                 <input
+                  id="date-to"
+                  name="dateTo"
                   type="date"
                   value={query.dateTo}
                   onChange={(e) => set({ dateTo: e.target.value })}
@@ -303,6 +308,7 @@ export default function QueryPanel({
         <label htmlFor="weight">Match on</label>
         <input
           id="weight"
+          name="weight"
           type="range"
           min="0"
           max="1"
