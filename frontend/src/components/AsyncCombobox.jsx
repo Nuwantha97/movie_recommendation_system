@@ -2,12 +2,13 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useDebounce } from "../hooks";
 import { isAbort } from "../api";
 
-const MIN_CHARS = 2;
 const MAX_VISIBLE = 45;
 
 export default function AsyncCombobox({
+  id,
   label,
   placeholder,
+  minChars = 2,
   fetchOptions,   // (query, signal) => Promise<item[]>
   onSelect,       // (item) => void
   getKey,         // (item) => string
@@ -25,12 +26,12 @@ export default function AsyncCombobox({
   const rootRef = useRef(null);
   const listId = useId();
 
-  const isShort = debounced.length < MIN_CHARS;
+  const isShort = debounced.length < minChars;
   const currentOptions = isShort ? [] : options;
   const currentStatus = isShort ? "idle" : status;
 
   useEffect(() => {
-    if (debounced.length < MIN_CHARS) {
+    if (debounced.length < minChars) {
       return;
     }
     const controller = new AbortController();
@@ -50,7 +51,7 @@ export default function AsyncCombobox({
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced]);
+  }, [debounced, minChars]);
 
   useEffect(() => {
     const onDown = (e) => {
@@ -61,13 +62,20 @@ export default function AsyncCombobox({
   }, []);
 
   const visible = currentOptions.filter((o) => !isSelected(o)).slice(0, MAX_VISIBLE);
-  const settled = debounced === query && debounced.length >= MIN_CHARS;
+  const settled = debounced === query && debounced.length >= minChars;
 
   function pick(item) {
     onSelect(item);
     setText("");
     setOptions([]);
     setOpen(false);
+  }
+
+  function scrollActiveIntoView(index) {
+    requestAnimationFrame(() => {
+      const activeEl = document.getElementById(`${listId}-opt-${index}`);
+      activeEl?.scrollIntoView({ block: "nearest" });
+    });
   }
 
   function onKeyDown(e) {
@@ -77,10 +85,18 @@ export default function AsyncCombobox({
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((a) => (visible.length ? (a + 1) % visible.length : 0));
+      setActive((a) => {
+        const next = visible.length ? (a + 1) % visible.length : 0;
+        scrollActiveIntoView(next);
+        return next;
+      });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((a) => (visible.length ? (a - 1 + visible.length) % visible.length : 0));
+      setActive((a) => {
+        const next = visible.length ? (a - 1 + visible.length) % visible.length : 0;
+        scrollActiveIntoView(next);
+        return next;
+      });
     } else if (e.key === "Enter") {
       if (open && visible[active]) {
         e.preventDefault();
@@ -91,17 +107,21 @@ export default function AsyncCombobox({
     }
   }
 
-  const showPanel = open && query.length >= MIN_CHARS;
+  const showPanel = open && query.length >= minChars;
+  const activeDescendantId =
+    showPanel && visible[active] ? `${listId}-opt-${active}` : undefined;
 
   return (
     <div className="combo" ref={rootRef}>
       <input
+        id={id}
         type="text"
         role="combobox"
         aria-label={label}
         aria-expanded={showPanel}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={activeDescendantId}
         placeholder={placeholder}
         value={text}
         autoComplete="off"
@@ -113,14 +133,32 @@ export default function AsyncCombobox({
         onKeyDown={onKeyDown}
       />
       {showPanel && (
-        <ul className="combo-list" id={listId} role="listbox">
-          {currentStatus === "loading" && <li className="combo-note">Searching…</li>}
+        <ul
+          className="combo-list"
+          id={listId}
+          role="listbox"
+          aria-busy={currentStatus === "loading"}
+        >
+          {currentStatus === "loading" && (
+            <>
+              {[0, 1, 2].map((i) => (
+                <li key={`combo-sk-${i}`} className="combo-skeleton" aria-hidden="true">
+                  <div className="sk sk-combo-thumb" />
+                  <div className="sk-combo-text">
+                    <div className="sk sk-combo-title" />
+                    <div className="sk sk-combo-sub" />
+                  </div>
+                </li>
+              ))}
+            </>
+          )}
           {currentStatus === "error" && <li className="combo-note error">{errorMsg}</li>}
           {settled && currentStatus === "idle" && visible.length === 0 && (
             <li className="combo-note">No matches</li>
           )}
           {visible.map((item, i) => (
             <li
+              id={`${listId}-opt-${i}`}
               key={getKey(item)}
               role="option"
               aria-selected={i === active}
