@@ -7,6 +7,8 @@
   --accent: #4F5D95;
   --accent-soft: #EEF0F6;
   --accent-tint: #E4E7F2;
+  --logo-tags: var(--accent);
+  --logo-plot: #C58B2A;
   --plot: #966928;
   --danger: #9B3D3D;
   --radius: 14px;
