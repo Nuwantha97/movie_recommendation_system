@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import QueryPanel from "./components/QueryPanel";
 import Results from "./components/Results";
 import MovieDetail from "./components/MovieDetail";
+import Logo from "./components/Logo";
 import { isAbort, recommend, recommendPage, recommendExplanations } from "./api";
 import { INITIAL_QUERY, buildRequest, canSubmit } from "./query";
 
@@ -328,10 +329,11 @@ export default function App() {
               navigateToHome();
             }}
           >
-            Movie finder
+            <Logo size={36} />
+            <span className="brand-wordmark">DualLens</span>
           </a>
         </h1>
-        <p>Content-based picks.</p>
+        <p className="brand-subtitle">Dual-Signal Movie Recommendation System</p>
       </header>
 
       {route.page === "movie" ? (

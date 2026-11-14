@@ -153,7 +153,7 @@ export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie
                 poster_path: posterPath,
               })
             }
-            title="Use this movie as an input seed in movie finder"
+            title="Use this movie as an input seed in DualLens"
           >
             <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
