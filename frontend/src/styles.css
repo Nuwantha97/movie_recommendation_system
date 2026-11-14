@@ -1350,6 +1350,120 @@ details summary {
   user-select: none;
 }
 
+/* Site Footer */
+.site-footer {
+  margin-top: 48px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: 20px 0;
+}
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.footer-brand-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-brand-title strong {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.footer-tagline {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.footer-credit {
+  max-width: 360px;
+  margin: 0;
+  line-height: 1.4;
+  font-size: 13px;
+}
+
+.site-footer a {
+  color: inherit;
+  text-underline-offset: 3px;
+  transition: color 150ms ease;
+}
+
+.site-footer a:hover {
+  color: var(--accent);
+}
+
+.sponsor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease;
+  position: relative;
+}
+
+.sponsor-btn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
+  width: 100%;
+  height: 100%;
+}
+
+.sponsor-btn .heart-icon {
+  color: #C2456B;
+  flex-shrink: 0;
+}
+
+.sponsor-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.sponsor-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 /* ==========================================================================
    Responsive Layout (Consistent Breakpoints: <=600, 601-1023, >=1024)
    ========================================================================== */
@@ -1486,6 +1600,27 @@ details summary {
 
   .recommendation-scores-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Mobile footer rules */
+  .footer-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+    padding: 20px 0;
+  }
+
+  .footer-brand {
+    align-items: center;
+  }
+
+  .footer-actions {
+    justify-content: center;
+  }
+
+  .site-footer.with-sticky-bar {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0));
   }
 
   .cast-grid {

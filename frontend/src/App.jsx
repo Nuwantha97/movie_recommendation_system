@@ -3,6 +3,7 @@ import QueryPanel from "./components/QueryPanel";
 import Results from "./components/Results";
 import MovieDetail from "./components/MovieDetail";
 import Logo from "./components/Logo";
+import Footer from "./components/Footer";
 import { isAbort, recommend, recommendPage, recommendExplanations } from "./api";
 import { INITIAL_QUERY, buildRequest, canSubmit } from "./query";
 
@@ -374,6 +375,7 @@ export default function App() {
           </section>
         </main>
       )}
+      <Footer hasStickySubmit={route.page !== "movie"} />
     </div>
   );
 }
