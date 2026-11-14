@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import AsyncCombobox from "./AsyncCombobox";
 import ChipList from "./ChipList";
 import MoviePoster from "./MoviePoster";
@@ -48,6 +49,18 @@ export default function QueryPanel({
   backendErrors = {},
   onClearBackendError,
 }) {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
+  );
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const handler = (e) => setIsDesktop(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
   const set = (patch) => setQuery((q) => ({ ...q, ...patch }));
 
   const plotText = query.plotText || "";
@@ -183,7 +196,15 @@ export default function QueryPanel({
       <div className="divider" />
 
       {/* Collapsible Filters Section for Tablet & Mobile (stays expanded on Desktop) */}
-      <details className="filters-details">
+      <details
+        className="filters-details"
+        open={isDesktop || mobileOpen}
+        onToggle={(e) => {
+          if (!isDesktop) {
+            setMobileOpen(e.currentTarget.open);
+          }
+        }}
+      >
         <summary className="filters-summary">
           <div className="filters-summary-left">
             <span>Filters</span>
