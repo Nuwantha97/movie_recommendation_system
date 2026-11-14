@@ -148,7 +148,7 @@ export default function App() {
   }, [state.status, state.requestId, state.total, state.body, state.page, state.pages]);
 
   function navigateToMovie(movieItem) {
-    const id = movieItem.movie?.id ?? movieItem.movie_id ?? item.id;
+    const id = movieItem.movie?.id ?? movieItem.movie_id ?? movieItem.id;
     if (!id) return;
 
     saveMovieToCache(id, movieItem);
