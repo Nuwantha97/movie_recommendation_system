@@ -529,6 +529,11 @@ button.secondary:hover {
   user-select: none;
   background: var(--surface);
   transition: background-color 150ms ease;
+  list-style: none;
+}
+
+.filters-summary::-webkit-details-marker {
+  display: none;
 }
 
 .filters-summary:hover {
@@ -539,6 +544,23 @@ button.secondary:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.filters-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filters-chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  transition: transform 150ms ease;
+}
+
+details[open] .filters-chevron {
+  transform: rotate(180deg);
 }
 
 .filters-badge {
