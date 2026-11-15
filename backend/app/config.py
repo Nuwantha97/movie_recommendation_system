@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     use_matvec_tag_candidates: bool = True
     k_tag: int = 10_000
     k_plot: int = 5_000
-    max_results: int = 200
+    max_results: int = 100
     min_survivors: int = 1000
     starvation_hard_cap: int = 700_000
     tie_break_plot: bool = True
@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(validation_alias="GEMINI_API_KEY")
     gemini_model: str = "gemini-2.5-flash"   # check AI Studio for the current model id
     explain_timeout_s: float = 20.0
+    log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
 
     @staticmethod
     def _resolve(p: str) -> Path:

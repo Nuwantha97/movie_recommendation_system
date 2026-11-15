@@ -1,9 +1,9 @@
+import logging
 import time
-import numpy as np
 from app.config import settings
 from app.schemas import RecommendRequest
 from app.services import query_builder, candidates, scoring, fusion
-
+log = logging.getLogger(__name__)
 
 def retrieve_and_rank(req: RecommendRequest) -> dict:
     """Sync, CPU/IO-bound. Called via to_thread from the endpoint."""
@@ -20,6 +20,7 @@ def retrieve_and_rank(req: RecommendRequest) -> dict:
     lap("query_build")
 
     pool_ids = candidates.generate(req, q, timings=timings)       # already excludes selected movies
+    log.debug("Pool size: %d", len(pool_ids))
     lap("candidates")
 
     warnings = []

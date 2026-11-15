@@ -25,6 +25,12 @@ from app.services import recommender
 from app.stores import artifacts, chroma, text_embedder, meta_index
 from app.api import movies, tags, recommend
 
+logging.basicConfig(
+    level=logging.WARNING,                       # keep libraries quiet
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logging.getLogger("app").setLevel((settings.log_level or "INFO").upper())
+
 log = logging.getLogger(__name__)
 
 

@@ -37,6 +37,7 @@ services:
       APP_ENV: ${APP_ENV:-dev}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-["localhost","127.0.0.1"]}
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
