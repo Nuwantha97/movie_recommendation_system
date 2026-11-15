@@ -83,7 +83,7 @@ dvc pull
 ```
 
 Verify that the following directories and files are present:
-- `backend/artifacts/v1/` (`matrix.npz`, `meta_index.npz`, `row_norms.npy`, `plot_embeddings.bin`, `plot_ids.npy`, `inv_norms.npy`)
+- `backend/artifacts/v1/` (`tag_matrix.npz`, `tag_matrix_movie_ids.npy`, `tag_vectorizer_high.joblib`, `tag_vectorizer_mid.joblib`, `tag_vectorizer_low.joblib`, `plot_embeddings.npy`, `plot_embeddings_movie_ids.npy`, `plot_suppressed.npy`)
 - `backend/chroma_data/`
 - `database/moviedb.sql.gz`
 
