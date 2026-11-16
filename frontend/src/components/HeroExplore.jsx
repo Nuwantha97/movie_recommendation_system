@@ -3,6 +3,8 @@ import { canSubmit } from "../query";
 import AsyncCombobox from "./AsyncCombobox";
 import MoviePoster from "./MoviePoster";
 import ChipList from "./ChipList";
+import bgGoldenHorizon from "../assets/images/bg_golden_horizon.jpg";
+import bgEmeraldRainforest from "../assets/images/bg_emerald_rainforest.jpg";
 
 const FEATURED_SEEDS = [
   { id: 16254, title: "Inception", year: 2010, poster_path: "/xlaY2zyzMfkhk0HSC5VUwzoZPU1.jpg" },
@@ -44,21 +46,20 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
 
   return (
     <div className="hero-explore-container">
-      {/* Cinematic Banner with Background Poster Collages */}
+      {/* Cinematic Banner with Vibrant Widescreen Backdrop Image */}
       <div className="hero-banner">
         <div className="hero-banner-bg" aria-hidden="true">
-          <div className="hero-bg-poster" style={{ backgroundImage: "url(https://image.tmdb.org/t/p/w500/xlaY2zyzMfkhk0HSC5VUwzoZPU1.jpg)" }} />
-          <div className="hero-bg-poster" style={{ backgroundImage: "url(https://image.tmdb.org/t/p/w500/yQvGrMoipbRoddT0ZR8tPoR7NfX.jpg)" }} />
-          <div className="hero-bg-poster" style={{ backgroundImage: "url(https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg)" }} />
-          <div className="hero-bg-poster" style={{ backgroundImage: "url(https://image.tmdb.org/t/p/w500/dXNAPwY7VrqMAo51EKhhCJfaGb5.jpg)" }} />
+          <img
+            src={bgGoldenHorizon}
+            alt=""
+            className="hero-banner-img"
+            referrerPolicy="no-referrer"
+          />
         </div>
         <div className="hero-banner-overlay" />
         <div className="hero-banner-content">
-          <div className="hero-badge">
-            <span className="status-dot" aria-hidden="true" />
-            <span>Dual-Signal Cinema Intelligence</span>
-          </div>
-          <h2 className="hero-headline">Discover Movies You'll Truly Love</h2>
+          <p className="hero-kicker">Dual-Signal Cinema Intelligence</p>
+          <h2 className="hero-headline">Discover Movies You&apos;ll Truly Love</h2>
           <p className="hero-subheading">
             DualLens synthesizes <strong>thematic metadata tags</strong> with <strong>semantic plot narratives</strong> to deliver calibrated, personalized recommendations with zero guesswork.
           </p>
@@ -191,6 +192,15 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
 
       {/* Featured Movie Photo Seeds */}
       <div className="hero-featured-section">
+        <div className="featured-backdrop-wrap" aria-hidden="true">
+          <img
+            src={bgEmeraldRainforest}
+            alt=""
+            className="featured-backdrop-img"
+            referrerPolicy="no-referrer"
+          />
+          <div className="featured-backdrop-scrim" />
+        </div>
         <div className="featured-section-header">
           <div>
             <h3 className="hero-section-title">Popular Anchor Seeds</h3>
@@ -214,8 +224,7 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
                     path={movie.poster_path}
                     title={movie.title}
                     size="w500"
-                    width={120}
-                    height={180}
+                    className="featured-poster"
                   />
                   <div className="featured-badge-indicator">
                     {isSelected ? "✓ Added" : "+ Add"}

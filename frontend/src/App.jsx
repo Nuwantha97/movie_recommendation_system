@@ -4,6 +4,7 @@ import Results from "./components/Results";
 import MovieDetail from "./components/MovieDetail";
 import Logo from "./components/Logo";
 import Footer from "./components/Footer";
+import bgFestivalTerrace from "./assets/images/bg_festival_terrace.jpg";
 import { isAbort, recommend, recommendPage, recommendExplanations } from "./api";
 import { INITIAL_QUERY, buildRequest, canSubmit } from "./query";
 
@@ -343,6 +344,16 @@ export default function App() {
 
   return (
     <div className="app">
+      <div className="app-backdrop" aria-hidden="true">
+        <img
+          src={bgFestivalTerrace}
+          alt=""
+          className="app-backdrop-img"
+          referrerPolicy="no-referrer"
+        />
+        <div className="app-backdrop-scrim" />
+      </div>
+
       <header className="site-header">
         <div className="header-inner">
           <div className="header-brand-group">
@@ -362,6 +373,11 @@ export default function App() {
                 </div>
               </a>
             </h1>
+          </div>
+          <div className="header-signals-legend" aria-label="Recommendation signals">
+            <span className="legend-tag">Tags Signal</span>
+            <span className="legend-sep" aria-hidden="true">·</span>
+            <span className="legend-plot">Plot Signal</span>
           </div>
         </div>
       </header>
