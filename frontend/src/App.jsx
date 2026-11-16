@@ -363,10 +363,6 @@ export default function App() {
               </a>
             </h1>
           </div>
-          <div className="header-status" aria-label="System status: Active">
-            <span className="status-dot" aria-hidden="true" />
-            <span className="status-label">Dual-Signal AI Engine</span>
-          </div>
         </div>
       </header>
 

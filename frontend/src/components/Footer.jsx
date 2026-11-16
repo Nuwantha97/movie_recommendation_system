@@ -1,7 +1,7 @@
 import Logo from "./Logo";
 
 const SPONSOR_URL = "https://github.com/sponsors/Nuwantha97";
-const GITHUB_REPO_URL = "https://github.com/dilminidasunika/movie_recommendation_system";
+const GITHUB_REPO_URL = "https://github.com/";
 
 export default function Footer({ hasStickySubmit = false }) {
   return (
@@ -13,7 +13,7 @@ export default function Footer({ hasStickySubmit = false }) {
             <strong>DualLens</strong>
           </div>
           <p className="footer-tagline">
-            Dual-Signal Movie Recommendation System. No accounts, nothing saved.
+            Dual-Signal Movie Recommendation System.
           </p>
         </div>
 
@@ -45,7 +45,7 @@ export default function Footer({ hasStickySubmit = false }) {
             </svg>
             <span>Sponsor</span>
           </a>
-
+        {/*
           <a
             href={GITHUB_REPO_URL}
             className="footer-link"
@@ -54,6 +54,7 @@ export default function Footer({ hasStickySubmit = false }) {
           >
             GitHub
           </a>
+        */}
         </div>
       </div>
     </footer>
