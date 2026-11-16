@@ -1,15 +1,23 @@
-export default function ChipList({ items, getKey, getLabel, onRemove }) {
+export default function ChipList({ items, getKey, getLabel, renderLabel, onRemove }) {
   if (items.length === 0) return null;
   return (
     <ul className="chips">
-      {items.map((item) => (
-        <li key={getKey(item)} className="chip">
-          <span>{getLabel(item)}</span>
-          <button type="button" aria-label={`Remove ${getLabel(item)}`} onClick={() => onRemove(item)}>
-            ×
-          </button>
-        </li>
-      ))}
+      {items.map((item) => {
+        const labelText = getLabel ? getLabel(item) : "";
+        const isCustom = typeof renderLabel === "function";
+        return (
+          <li key={getKey(item)} className={isCustom ? "chip chip-movie" : "chip"}>
+            {isCustom ? renderLabel(item) : <span>{labelText}</span>}
+            <button
+              type="button"
+              aria-label={`Remove ${labelText || "item"}`}
+              onClick={() => onRemove(item)}
+            >
+              ×
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

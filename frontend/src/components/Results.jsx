@@ -2,6 +2,7 @@ import { hasFilters } from "../query";
 import MoviePoster from "./MoviePoster";
 import ScoreBar from "./ScoreBar";
 import Pagination from "./Pagination";
+import HeroExplore from "./HeroExplore";
 
 const tagName = (t) => (typeof t === "string" ? t : t?.name ?? "");
 
@@ -91,6 +92,10 @@ function Skeleton() {
 export default function Results({
   state,
   query,
+  setQuery,
+  onSubmit,
+  loading,
+  onClearResults,
   onClearFilters,
   onRetry,
   onSelectMovie,
@@ -101,6 +106,16 @@ export default function Results({
   const totalPages = Math.ceil((total || 0) / 20);
 
   if (status === "idle") {
+    if (setQuery) {
+      return (
+        <HeroExplore
+          query={query}
+          setQuery={setQuery}
+          onSubmit={onSubmit}
+          loading={loading}
+        />
+      );
+    }
     return (
       <div className="empty">
         <h2>Find something you have not seen</h2>
@@ -135,18 +150,56 @@ export default function Results({
             ? "Your filters left nothing to rank. Widen the date range or remove a language or genre."
             : "Nothing came back. Try different movies or tags."}
         </p>
-        {hasFilters(query) && (
-          <button type="button" className="secondary" onClick={onClearFilters}>
-            Clear filters
-          </button>
-        )}
+        <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginTop: "12px", flexWrap: "wrap" }}>
+          {hasFilters(query) && (
+            <button type="button" className="secondary" onClick={onClearFilters}>
+              Clear filters
+            </button>
+          )}
+          {onClearResults && (
+            <button type="button" className="secondary" onClick={onClearResults}>
+              Clean results
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <h2 className="results-title">{total} recommendations · page {page} of {totalPages}</h2>
+      <div className="results-header">
+        <h2 className="results-title">
+          <span className="results-count-badge">{total}</span>
+          <span>recommendations</span>
+          <span className="results-page-badge">Page {page} of {totalPages}</span>
+        </h2>
+        {onClearResults && (
+          <button
+            type="button"
+            className="clean-results-btn"
+            onClick={onClearResults}
+            aria-label="Clean results and return to explore"
+            title="Clean results and return to explore"
+          >
+            <svg
+              className="clean-icon"
+              viewBox="0 0 20 20"
+              width="14"
+              height="14"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span>Clean results</span>
+          </button>
+        )}
+      </div>
       {pageLoading ? <Skeleton /> : (
         <ul className="cards">
           {items.map((m, i) => (

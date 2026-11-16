@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import QueryPanel from "./components/QueryPanel";
 import Results from "./components/Results";
 import MovieDetail from "./components/MovieDetail";
+import Logo from "./components/Logo";
+import Footer from "./components/Footer";
+import bgFestivalTerrace from "./assets/images/bg_festival_terrace.jpg";
 import { isAbort, recommend, recommendPage, recommendExplanations } from "./api";
 import { INITIAL_QUERY, buildRequest, canSubmit } from "./query";
 
@@ -178,7 +181,15 @@ export default function App() {
       }
       return {
         ...q,
-        movies: [...q.movies, { id: movie.id, title: movie.title || "Movie" }],
+        movies: [
+          ...q.movies,
+          {
+            id: movie.id,
+            title: movie.title || "Movie",
+            year: movie.year ?? movie.release_year ?? null,
+            poster_path: movie.poster_path ?? movie.movie?.poster_path ?? null,
+          },
+        ],
       };
     });
     navigateToHome();
@@ -288,6 +299,29 @@ export default function App() {
     }
   }
 
+  function clearResults() {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setState({
+      status: "idle",
+      error: "",
+      requestId: null,
+      total: 0,
+      body: null,
+      page: 1,
+      pages: {},
+      pageLoading: false,
+      explaining: {},
+    });
+    try {
+      sessionStorage.removeItem(RESULTS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function clearFilters() {
     setQuery((q) => ({ ...q, languages: [], genres: [], dateFrom: "", dateTo: "" }));
     setState({
@@ -310,24 +344,46 @@ export default function App() {
 
   return (
     <div className="app">
+      <div className="app-backdrop" aria-hidden="true">
+        <img
+          src={bgFestivalTerrace}
+          alt=""
+          className="app-backdrop-img"
+          referrerPolicy="no-referrer"
+        />
+        <div className="app-backdrop-scrim" />
+      </div>
+
       <header className="site-header">
-        <h1>
-          <a
-            href="/"
-            className="brand-link"
-            onClick={(e) => {
-              e.preventDefault();
-              navigateToHome();
-            }}
-          >
-            Movie finder
-          </a>
-        </h1>
-        <p>Content-based picks.</p>
+        <div className="header-inner">
+          <div className="header-brand-group">
+            <h1>
+              <a
+                href="/"
+                className="brand-link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigateToHome();
+                }}
+              >
+                <Logo size={40} />
+                <div className="brand-titles">
+                  <span className="brand-wordmark">DualLens</span>
+                  <span className="brand-subtitle">Dual-Signal Movie Recommendation System</span>
+                </div>
+              </a>
+            </h1>
+          </div>
+          <div className="header-signals-legend" aria-label="Recommendation signals">
+            <span className="legend-tag">Tags Signal</span>
+            <span className="legend-sep" aria-hidden="true">·</span>
+            <span className="legend-plot">Plot Signal</span>
+          </div>
+        </div>
       </header>
 
       {route.page === "movie" ? (
-        <main>
+        <main className="layout-detail">
           <MovieDetail
             key={route.movieId}
             movieId={route.movieId}
@@ -356,6 +412,10 @@ export default function App() {
             <Results
               state={state}
               query={query}
+              setQuery={setQuery}
+              onSubmit={submit}
+              loading={state.status === "loading"}
+              onClearResults={clearResults}
               onClearFilters={clearFilters}
               onRetry={submit}
               onSelectMovie={navigateToMovie}
@@ -364,6 +424,7 @@ export default function App() {
           </section>
         </main>
       )}
+      <Footer hasStickySubmit={route.page !== "movie"} />
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { getMovie, isAbort } from "../api";
 import { languageName } from "../constants";
 import MoviePoster from "./MoviePoster";
 import ScoreBar from "./ScoreBar";
+import bgEmeraldRainforest from "../assets/images/bg_emerald_rainforest.jpg";
+import bgGoldenHorizon from "../assets/images/bg_golden_horizon.jpg";
 
 function formatDate(dateStr) {
   if (!dateStr) return null;
@@ -129,6 +131,7 @@ export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie
   const companies = Array.isArray(movieData?.production_companies) ? movieData.production_companies : [];
   const countries = Array.isArray(movieData?.production_countries) ? movieData.production_countries : [];
   const spoken = Array.isArray(movieData?.spoken_languages) ? movieData.spoken_languages : [];
+  const detailBackdrop = Number(movieId) % 2 === 0 ? bgEmeraldRainforest : bgGoldenHorizon;
 
   return (
     <div className="movie-detail-page">
@@ -145,8 +148,15 @@ export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie
           <button
             type="button"
             className="btn-seed"
-            onClick={() => onSeedMovie({ id: movieData?.id ?? movieId, title })}
-            title="Use this movie as an input seed in movie finder"
+            onClick={() =>
+              onSeedMovie({
+                id: movieData?.id ?? movieId,
+                title,
+                year,
+                poster_path: posterPath,
+              })
+            }
+            title="Use this movie as an input seed in DualLens"
           >
             <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
@@ -159,6 +169,15 @@ export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie
       </nav>
 
       <article className="detail-card">
+        <div className="detail-backdrop-wrap" aria-hidden="true">
+          <img
+            src={detailBackdrop}
+            alt=""
+            className="detail-backdrop-img"
+            referrerPolicy="no-referrer"
+          />
+          <div className="detail-backdrop-scrim" />
+        </div>
         <div className="detail-poster-col">
           <MoviePoster path={posterPath} title={title} className="detail-poster" />
           {finalScore !== null && (
