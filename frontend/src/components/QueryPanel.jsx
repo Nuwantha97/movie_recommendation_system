@@ -233,7 +233,7 @@ export default function QueryPanel({
         </summary>
         <div className="filters-content">
           <p className="note">
-            Language, genre and date are hard filters. Tags only nudge similarity, so they do not
+            Language, genre and date are hard filters. Tags only nudge similarity, so tags do not
             guarantee a person's films appear.
           </p>
 
