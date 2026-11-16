@@ -14,15 +14,34 @@ cd frontend
 npm run dev
 ```
 
-#### Production Deployment
+#### Automated Production Deployment (Azure VM / Linux)
 ```bash
-# 1. Build frontend distribution assets
+# 1. Configure production environment
+cp .env.example .env
+# Edit .env with your DB credentials, GEMINI_API_KEY, DAGSHUB_USER, and DAGSHUB_TOKEN
+
+# 2. Run the automated bootstrap script
+chmod +x deploy/bootstrap.sh
+./deploy/bootstrap.sh
+```
+The bootstrap script automatically:
+1. Pulls large ML artifacts (`~3.1 GB`) and TMDB database dump (`~319 MB`) via DVC from DagsHub (skips if already on disk).
+2. Boots PostgreSQL and restores `movies` catalog into `pgdata` (skips if already populated).
+3. Compiles the React frontend into `frontend/dist/`.
+4. Builds and launches the production stack (`backend`, `database`, `proxy` via Caddy on ports 80/443).
+
+#### Manual Production Deployment
+```bash
+# 1. Pull data assets via DVC
+dvc pull backend/artifacts/v1.dvc database/moviedb.sql.gz.dvc
+
+# 2. Build frontend distribution assets
 cd frontend
 npm run build
 cd ..
 
-# 2. Run compose in production mode (bypasses docker-compose.override.yml, launches Caddy proxy)
-docker compose -f docker-compose.yml --profile prod up -d
+# 3. Run compose in production mode (bypasses docker-compose.override.yml, launches Caddy proxy)
+docker compose -f docker-compose.yml --profile prod up -d --build
 ```
 In production, port 8000 is never exposed to the host network (`expose: ["8000"]`). Instead, Caddy listens on ports 80 and 443, serves the static frontend assets from `./frontend/dist`, applies security headers, and reverse proxies `/api/*` requests to the backend service.
 

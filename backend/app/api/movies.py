@@ -36,7 +36,7 @@ def _escape_like(s: str) -> str:
 @router.get("/search", response_model=list[MovieHit])
 def search_movies(
     q: str = Query(..., max_length=100),
-    limit: int = Query(10, ge=1, le=25),
+    limit: int = Query(20, ge=1, le=25),
     pool: ConnectionPool = Depends(get_pool),
 ):
     q = q.strip().lower()
