@@ -5,6 +5,23 @@ from app.schemas import RecommendRequest
 from app.services import query_builder, candidates, scoring, fusion
 log = logging.getLogger(__name__)
 
+def _cleanup_query(q) -> None:
+    """Release large numpy arrays that were only needed for retrieval/scoring.
+
+    The cached Query (via paging) only needs q.chips for explanations;
+    tag_full_sims is float32[1M] ≈ 4.3 MB and would leak ~850 MB in
+    a TTLCache(maxsize=200).
+    """
+    if q is None:
+        return
+    q.tag_full_sims = None
+    q.tag_sparse = None
+    q.tag_ann = None
+    q.plot_centroid = None
+    if hasattr(q, "_meta_rows"):
+        q._meta_rows = None
+
+
 def retrieve_and_rank(req: RecommendRequest) -> dict:
     """Sync, CPU/IO-bound. Called via to_thread from the endpoint."""
     t_start = time.perf_counter()
@@ -31,6 +48,7 @@ def retrieve_and_rank(req: RecommendRequest) -> dict:
 
     if len(pool_ids) == 0:
         timings["total"] = round(time.perf_counter() - t_start, 4)
+        _cleanup_query(q)
         return {"ranked": [], "pool_size": 0, "warnings": warnings,
                 "timings": timings, "query": q}
 
@@ -42,16 +60,7 @@ def retrieve_and_rank(req: RecommendRequest) -> dict:
 
     timings["total"] = round(time.perf_counter() - t_start, 4)
 
-    # Release large numpy arrays that were only needed for scoring.
-    # The cached Query (via paging) only needs q.chips for explanations;
-    # tag_full_sims is float32[1M] ≈ 4.3 MB and would leak ~850 MB in
-    # a TTLCache(maxsize=200).
-    q.tag_full_sims = None
-    q.tag_sparse = None
-    q.tag_ann = None
-    q.plot_centroid = None
-    if hasattr(q, "_meta_rows"):
-        q._meta_rows = None
+    _cleanup_query(q)
 
     return {"ranked": ranked, "pool_size": len(pool_ids), "warnings": warnings,
             "timings": timings, "query": q}

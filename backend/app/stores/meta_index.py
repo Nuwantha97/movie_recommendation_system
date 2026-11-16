@@ -76,6 +76,7 @@ def load_index() -> MetaIndex:
     # Fetch unique genres and languages first to establish code mappings
     with current_pool().connection() as conn:
         with conn.cursor() as cur:
+            cur.execute("SET statement_timeout = '60s'")
             cur.execute("SELECT DISTINCT original_language FROM movies WHERE original_language IS NOT NULL")
             raw_langs = [r["original_language"].strip().lower() for r in cur.fetchall() if r["original_language"]]
             all_langs = sorted(list(set(raw_langs)))
@@ -103,6 +104,7 @@ def load_index() -> MetaIndex:
     genre_list: list[int] = []
 
     with current_pool().connection() as conn:
+        conn.execute("SET statement_timeout = '120s'")
         with conn.cursor(name="meta_stream") as cur:
             cur.execute("SELECT id, original_language, release_date, genres FROM movies ORDER BY id")
             while True:

@@ -110,6 +110,30 @@ class TestMemoryLeak(unittest.TestCase):
                         f"(limit 100 KB); it should be released after scoring."
                     )
 
+    def test_empty_pool_releases_large_arrays_on_query(self):
+        """When candidate generation produces zero candidates, Query large arrays must still be cleaned up."""
+        from app.schemas import RecommendRequest
+        from app.services import recommender
+
+        seeds = [238, 240, 278]
+        req = RecommendRequest(movie_ids=seeds, tag_weight=0.5)
+
+        # Mock candidates.generate to return empty array
+        with patch("app.services.candidates.generate", return_value=np.empty(0, dtype=np.int64)):
+            out = recommender.retrieve_and_rank(req)
+            self.assertEqual(out["pool_size"], 0)
+            self.assertEqual(len(out["ranked"]), 0)
+
+            q = out["query"]
+            self.assertIsNone(q.tag_full_sims, "q.tag_full_sims must be None even when pool is empty")
+            self.assertIsNone(q.tag_sparse, "q.tag_sparse must be None even when pool is empty")
+            self.assertIsNone(q.tag_ann, "q.tag_ann must be None even when pool is empty")
+            self.assertIsNone(q.plot_centroid, "q.plot_centroid must be None even when pool is empty")
+            for attr_name in vars(q):
+                val = getattr(q, attr_name)
+                if isinstance(val, np.ndarray) and val.nbytes > 100 * 1024:
+                    self.fail(f"Query.{attr_name} retained {val.nbytes / 1024:.0f} KB on zero-candidate result")
+
     def test_working_set_growth_bounded(self):
         """(a) 250 distinct requests — working-set growth < 60 MB once cache is full."""
         import gc
