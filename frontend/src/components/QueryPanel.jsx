@@ -233,8 +233,8 @@ export default function QueryPanel({
         </summary>
         <div className="filters-content">
           <p className="note">
-            Language, genre and date are hard filters. Tags only nudge similarity, so tags do not
-            guarantee a person's films appear.
+            Language, genre, and release dates are strict filters. People and keywords
+            influence similarity ranking rather than strictly excluding results.
           </p>
 
           <div className="field">
@@ -305,7 +305,14 @@ export default function QueryPanel({
       <div className="divider" />
 
       <div className="field">
-        <label htmlFor="weight">Match on</label>
+        <div className="field-header">
+          <label htmlFor="weight">Signal balance</label>
+          <span className="field-hint" aria-hidden="true">
+            {noPlotQuery
+              ? "Plot inactive"
+              : `${100 - tagPct}% Plot · ${tagPct}% Tags`}
+          </span>
+        </div>
         <input
           id="weight"
           name="weight"
@@ -315,7 +322,7 @@ export default function QueryPanel({
           step="0.05"
           value={noPlotQuery ? 1 : query.tagWeight}
           disabled={noPlotQuery}
-          aria-label="Match on plot or tags"
+          aria-label="Balance between semantic plot and thematic tags"
           aria-valuemin="0"
           aria-valuemax="1"
           aria-valuenow={noPlotQuery ? 1 : query.tagWeight}
@@ -327,13 +334,15 @@ export default function QueryPanel({
           onChange={(e) => set({ tagWeight: Number(e.target.value) })}
         />
         <div className="slider-labels" aria-hidden="true">
-          <span>Plot</span>
-          <span>Tags</span>
+          <span>More Plot</span>
+          <span>More Tags</span>
         </div>
         <p className="note">
           {noPlotQuery
-            ? "Tags only. Pick at least one movie or describe a plot to compare plots."
-            : `${tagPct}% tags, ${100 - tagPct}% plot`}
+            ? (query.tags.length > 0
+                ? "Matching on tags only. Add a movie or describe a plot to enable plot matching."
+                : "Add a movie seed or plot description to balance plot vs. tags.")
+            : `${tagPct}% thematic tags, ${100 - tagPct}% semantic plot similarity.`}
         </p>
       </div>
 
