@@ -114,7 +114,7 @@ curl -sS http://localhost:8000/api/recommend \
   -d '{"movie_ids":[8309],"original_language":["en"],"tag_weight":0.4,"top_n":5}'
 ```
 
-Supply at least one of `movie_ids`, `tags`, or `plot_text`. Plot descriptions accept 30–1,000 characters after whitespace normalization. A tag has a type and a name, for example `{"tag_type":"director","name":"Clint Eastwood"}`. A weight of `0.4` assigns 40% to tags and 60% to plot similarity.
+Supply at least one of `movie_ids`, `tags`, or `plot_text`. Each request accepts up to 10 movies, 20 tags, 6 genres, and 10 original languages. Plot descriptions accept 30–1,000 characters after whitespace normalization. A tag has a type and a name, for example `{"tag_type":"director","name":"Clint Eastwood"}`. A weight of `0.4` assigns 40% to tags and 60% to plot similarity.
 
 | Endpoint | Purpose |
 | --- | --- |

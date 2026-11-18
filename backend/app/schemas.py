@@ -12,11 +12,11 @@ class TagIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 
 class RecommendRequest(BaseModel):
-    movie_ids: list[int] = Field(default_factory=list, max_length=20)
-    tags: list[TagIn] = Field(default_factory=list, max_length=30)
+    movie_ids: list[int] = Field(default_factory=list, max_length=10)
+    tags: list[TagIn] = Field(default_factory=list, max_length=20)
     plot_text: str | None = None
     original_language: list[str] = Field(default_factory=list, max_length=10)
-    genres: list[str] = Field(default_factory=list, max_length=10)
+    genres: list[str] = Field(default_factory=list, max_length=6)
     date_from: date | None = None
     date_to: date | None = None
     tag_weight: float = Field(0.5, ge=0, le=1)

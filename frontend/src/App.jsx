@@ -6,7 +6,7 @@ import Logo from "./components/Logo";
 import Footer from "./components/Footer";
 import bgFestivalTerrace from "./assets/images/bg_festival_terrace.jpg";
 import { isAbort, recommend, recommendPage, recommendExplanations } from "./api";
-import { INITIAL_QUERY, buildRequest, canSubmit } from "./query";
+import { INITIAL_QUERY, SELECTION_LIMITS, addSelection, buildRequest, canSubmit, withinSelectionLimits } from "./query";
 
 const STORAGE_PREFIX = "mf_movie_";
 const RESULTS_KEY = "mf_last_results";
@@ -181,18 +181,12 @@ export default function App() {
       if (q.movies.some((m) => String(m.id) === String(movie.id))) {
         return q;
       }
-      return {
-        ...q,
-        movies: [
-          ...q.movies,
-          {
-            id: movie.id,
-            title: movie.title || "Movie",
-            year: movie.year ?? movie.release_year ?? null,
-            poster_path: movie.poster_path ?? movie.movie?.poster_path ?? null,
-          },
-        ],
-      };
+      return addSelection(q, "movies", {
+        id: movie.id,
+        title: movie.title || "Movie",
+        year: movie.year ?? movie.release_year ?? null,
+        poster_path: movie.poster_path ?? movie.movie?.poster_path ?? null,
+      });
     });
     navigateToHome();
   }
@@ -272,6 +266,9 @@ export default function App() {
       const body = isCustom
         ? customBody
         : (canSubmit(query) ? buildRequest(query) : state.body) || buildRequest(query);
+      if (!withinSelectionLimits({ ...body, movies: body.movie_ids, languages: body.original_language })) {
+        throw new Error("This search exceeds the selection limits. Choose fewer items and search again.");
+      }
       const r = await recommend(body, controller.signal);
       if (controller.signal.aborted) return;
       setState({
@@ -376,6 +373,7 @@ export default function App() {
             initialMovie={selectedMovie}
             onBack={navigateToHome}
             onSeedMovie={handleSeedMovie}
+            seedDisabled={query.movies.length >= SELECTION_LIMITS.movies}
           />
         </main>
       ) : (

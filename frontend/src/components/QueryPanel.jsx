@@ -4,21 +4,17 @@ import ChipList from "./ChipList";
 import MoviePoster from "./MoviePoster";
 import { searchLanguages, searchMovies, searchTags } from "../api";
 import { GENRES, TAG_LABELS, languageName } from "../constants";
-import { canSubmit, dateRangeInvalid, getPlotTextError } from "../query";
+import { addSelection, canSubmit, dateRangeInvalid, getPlotTextError, SELECTION_LIMITS } from "../query";
 
 const tagKey = (t) => `${t.tag_type}:${t.name}`;
 const tagName = (t) => (t.tag_type === "spoken_languages" ? languageName(t.name) : t.name);
 const tagLabel = (t) => `${TAG_LABELS[t.tag_type] ?? t.tag_type}: ${tagName(t)}`;
 const movieYear = (m) => m.year ?? m.release_year ?? "";
 
-function toggle(list, value) {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-}
-
-function ToggleGroup({ legend, options, selected, onToggle }) {
+function ToggleGroup({ legend, options, selected, limit, onToggle }) {
   return (
     <fieldset className="field">
-      <legend>{legend}</legend>
+      <legend>{legend} ({selected.length}/{limit})</legend>
       <div className="toggles">
         {options.map((o) => {
           const value = typeof o === "string" ? o : o.value;
@@ -30,6 +26,7 @@ function ToggleGroup({ legend, options, selected, onToggle }) {
               type="button"
               className={on ? "toggle on" : "toggle"}
               aria-pressed={on}
+              disabled={!on && selected.length >= limit}
               onClick={() => onToggle(value)}
             >
               {label}
@@ -89,14 +86,15 @@ export default function QueryPanel({
       }}
     >
       <div className="field">
-        <label htmlFor="movie-search-input">Movies you like</label>
+        <label htmlFor="movie-search-input">Movies you like ({query.movies.length}/{SELECTION_LIMITS.movies})</label>
         <AsyncCombobox
           id="movie-search-input"
           label="Search movies"
           placeholder="Title or title and year, e.g. Up 2009"
           minChars={2}
+          disabled={query.movies.length >= SELECTION_LIMITS.movies}
           fetchOptions={searchMovies}
-          onSelect={(m) => set({ movies: [...query.movies, m] })}
+          onSelect={(m) => setQuery((q) => addSelection(q, "movies", m))}
           getKey={(m) => String(m.id)}
           isSelected={(m) => query.movies.some((x) => x.id === m.id)}
           renderOption={(m) => (
@@ -170,13 +168,16 @@ export default function QueryPanel({
       </div>
 
       <div className="field">
-        <label htmlFor="tag-search-input">People, keywords and more</label>
+        <label htmlFor="tag-search-input">People, keywords and more ({query.tags.length}/{SELECTION_LIMITS.tags})</label>
         <AsyncCombobox
           id="tag-search-input"
           label="Search tags"
           placeholder="Director, cast, keyword, country"
+          minChars={3}
+          showEmptyMessage={false}
+          disabled={query.tags.length >= SELECTION_LIMITS.tags}
           fetchOptions={searchTags}
-          onSelect={(t) => set({ tags: [...query.tags, t] })}
+          onSelect={(t) => setQuery((q) => addSelection(q, "tags", t))}
           getKey={tagKey}
           isSelected={(t) => query.tags.some((x) => tagKey(x) === tagKey(t))}
           renderOption={(t) => (
@@ -238,13 +239,14 @@ export default function QueryPanel({
           </p>
 
           <div className="field">
-            <label htmlFor="lang-search-input">Original language</label>
+            <label htmlFor="lang-search-input">Original language ({query.languages.length}/{SELECTION_LIMITS.languages})</label>
             <AsyncCombobox
               id="lang-search-input"
               label="Search original language"
               placeholder="Search by name or code, e.g. tamil or ta"
               fetchOptions={searchLanguages}
-              onSelect={(l) => set({ languages: [...query.languages, l.name] })}
+              disabled={query.languages.length >= SELECTION_LIMITS.languages}
+              onSelect={(l) => setQuery((q) => addSelection(q, "languages", l.name))}
               getKey={(l) => l.name}
               isSelected={(l) => query.languages.includes(l.name)}
               renderOption={(l) => (
@@ -266,7 +268,10 @@ export default function QueryPanel({
             legend="Genres (any of)"
             options={GENRES}
             selected={query.genres}
-            onToggle={(v) => set({ genres: toggle(query.genres, v) })}
+            limit={SELECTION_LIMITS.genres}
+            onToggle={(v) => setQuery((q) => q.genres.includes(v)
+              ? { ...q, genres: q.genres.filter((g) => g !== v) }
+              : addSelection(q, "genres", v))}
           />
 
           <fieldset className="field">

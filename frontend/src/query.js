@@ -10,6 +10,19 @@ export const INITIAL_QUERY = {
 };
 
 export const TOP_N = 20;
+export const SELECTION_LIMITS = { movies: 10, tags: 20, genres: 6, languages: 10 };
+
+export function addSelection(query, field, item) {
+  const selected = query[field];
+  if (selected.length >= SELECTION_LIMITS[field]) return query;
+  return { ...query, [field]: [...selected, item] };
+}
+
+export function withinSelectionLimits(query) {
+  return Object.entries(SELECTION_LIMITS).every(
+    ([field, limit]) => (query[field]?.length ?? 0) <= limit
+  );
+}
 
 export function dateRangeInvalid(q) {
   return Boolean(q.dateFrom && q.dateTo && q.dateFrom > q.dateTo);
@@ -38,6 +51,7 @@ export function hasPlotQuery(q) {
 
 // Backend rule: require at least one of movie_ids, tags, or plot_text.
 export function canSubmit(q) {
+  if (!withinSelectionLimits(q)) return false;
   if (dateRangeInvalid(q)) return false;
   if (getPlotTextError(q.plotText)) return false;
   const hasMovies = Boolean(q.movies && q.movies.length > 0);

@@ -9,6 +9,8 @@ export default function AsyncCombobox({
   label,
   placeholder,
   minChars = 2,
+  disabled = false,
+  showEmptyMessage = true,
   fetchOptions,   // (query, signal) => Promise<item[]>
   onSelect,       // (item) => void
   getKey,         // (item) => string
@@ -16,42 +18,34 @@ export default function AsyncCombobox({
   isSelected,     // (item) => boolean, selected items are hidden from suggestions
 }) {
   const [text, setText] = useState("");
-  const [options, setOptions] = useState([]);
+  const [result, setResult] = useState(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [status, setStatus] = useState("idle"); // idle | loading | error
-  const [errorMsg, setErrorMsg] = useState("");
   const query = text.trim();
   const debounced = useDebounce(query, 250);
   const rootRef = useRef(null);
   const listId = useId();
 
-  const isShort = debounced.length < minChars;
-  const currentOptions = isShort ? [] : options;
-  const currentStatus = isShort ? "idle" : status;
+  const current = result?.query === query && debounced === query ? result : null;
+  const currentStatus = current ? current.status : "loading";
 
   useEffect(() => {
-    if (debounced.length < minChars) {
+    if (disabled || debounced.length < minChars) {
       return;
     }
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStatus("loading");
     fetchOptions(debounced, controller.signal)
       .then((items) => {
-        setOptions(items);
+        if (controller.signal.aborted) return;
+        setResult({ query: debounced, status: "idle", items });
         setActive(0);
-        setStatus("idle");
       })
       .catch((err) => {
-        if (isAbort(err)) return;
-        setOptions([]);
-        setErrorMsg(err.message || "Search failed.");
-        setStatus("error");
+        if (controller.signal.aborted || isAbort(err)) return;
+        setResult({ query: debounced, status: "error", error: err.message || "Search failed.", items: [] });
       });
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, minChars]);
+  }, [debounced, minChars, disabled, fetchOptions]);
 
   useEffect(() => {
     const onDown = (e) => {
@@ -61,13 +55,13 @@ export default function AsyncCombobox({
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const visible = currentOptions.filter((o) => !isSelected(o)).slice(0, MAX_VISIBLE);
-  const settled = debounced === query && debounced.length >= minChars;
+  const visible = (current?.items ?? []).filter((o) => !isSelected(o)).slice(0, MAX_VISIBLE);
+  const showPanel = !disabled && open && query.length >= minChars &&
+    (showEmptyMessage || visible.length > 0 || currentStatus === "error");
 
   function pick(item) {
     onSelect(item);
     setText("");
-    setOptions([]);
     setOpen(false);
   }
 
@@ -98,7 +92,7 @@ export default function AsyncCombobox({
         return next;
       });
     } else if (e.key === "Enter") {
-      if (open && visible[active]) {
+      if (showPanel && visible[active]) {
         e.preventDefault();
         pick(visible[active]);
       }
@@ -107,7 +101,6 @@ export default function AsyncCombobox({
     }
   }
 
-  const showPanel = open && query.length >= minChars;
   const activeDescendantId =
     showPanel && visible[active] ? `${listId}-opt-${active}` : undefined;
 
@@ -119,11 +112,12 @@ export default function AsyncCombobox({
         role="combobox"
         aria-label={label}
         aria-expanded={showPanel}
-        aria-controls={listId}
+        aria-controls={showPanel ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={activeDescendantId}
-        placeholder={placeholder}
-        value={text}
+        disabled={disabled}
+        placeholder={disabled ? "Selection limit reached" : placeholder}
+        value={disabled ? "" : text}
         autoComplete="off"
         onChange={(e) => {
           setText(e.target.value);
@@ -152,8 +146,8 @@ export default function AsyncCombobox({
               ))}
             </>
           )}
-          {currentStatus === "error" && <li className="combo-note error">{errorMsg}</li>}
-          {settled && currentStatus === "idle" && visible.length === 0 && (
+          {currentStatus === "error" && <li className="combo-note error">{current.error}</li>}
+          {showEmptyMessage && currentStatus === "idle" && visible.length === 0 && (
             <li className="combo-note">No matches</li>
           )}
           {visible.map((item, i) => (
