@@ -64,14 +64,7 @@ export function buildRequest(q) {
 
   const tags = (q.tags || []).map((t) => ({ tag_type: t.tag_type, name: t.name }));
 
-  if (q.genres && q.genres.length) {
-    req.genres = q.genres;
-    for (const g of q.genres) {
-      if (!tags.some((t) => t.tag_type === "genres" && t.name === g)) {
-        tags.push({ tag_type: "genres", name: g });
-      }
-    }
-  }
+  if (q.genres?.length) req.genres = q.genres;
   if (tags.length) req.tags = tags;
 
   if (q.languages && q.languages.length) req.original_language = q.languages;

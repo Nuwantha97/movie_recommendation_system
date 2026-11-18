@@ -11,9 +11,10 @@ import scipy.sparse as sp
 from sklearn.preprocessing import normalize
 
 from app.config import settings
+from app.db import queries
 from app.schemas import RecommendRequest
 from app.stores import artifacts, chroma, text_embedder
-from app.services.soup import build_tier_docs
+from app.services.soup import TIERS, build_tier_docs, squash
 
 log = logging.getLogger(__name__)
 
@@ -35,16 +36,20 @@ class Query:
     missing_plot_ids: list[int] = field(default_factory=list)   # selected movies with no plot embedding
     plot_text: str | None = None
     tag_full_sims: np.ndarray | None = None
+    exact_tags: tuple[np.ndarray, np.ndarray] | None = None  # movie IDs and matched fractions
+    exact_tag_weight: float = 0.0
 
 
 def _movie_tag_part(movie_ids: list[int]):
-    id_to_row = artifacts.id_to_row()
-    present = [i for i in movie_ids if i in id_to_row]
-    missing = [i for i in movie_ids if i not in id_to_row]
-    if not present:
+    if not movie_ids:
+        return None, []
+    rows = artifacts.tag_rows_for(movie_ids)
+    usable = rows >= 0
+    usable[usable] = artifacts.row_norms()[rows[usable]] > 0
+    missing = [mid for mid, ok in zip(movie_ids, usable) if not ok]
+    rows = rows[usable]
+    if not len(rows):
         return None, missing
-
-    rows = [id_to_row[i] for i in present]
     m = normalize(artifacts.tag_matrix()[rows], norm="l2")        # per-movie unit rows
     mean = sp.csr_matrix(np.full((1, len(rows)), 1.0 / len(rows))) @ m
     mean = normalize(mean, norm="l2")
@@ -64,6 +69,29 @@ def _chip_part(chips: list[dict]):
     if vec.nnz == 0:                                              # chips not in vocabulary
         return None
     return normalize(vec, norm="l2")
+
+
+def _exact_tag_part(chips: list[dict], has_movie_tags: bool):
+    """Resolve chips missing from the fitted vocabulary against the catalog."""
+    if not chips:
+        return None, 0.0
+    vocab = {f: v.vocabulary_ for tier, v in zip(TIERS, artifacts.vectorizers()) for f in tier}
+    missing = defaultdict(set)
+    for chip in chips:
+        field, name = chip["tag_type"], chip["name"]
+        if squash(name) not in vocab[field]:
+            missing[field].add(name.strip().lower())
+    if not missing:
+        return None, 0.0
+    hits = queries.exact_tag_hits(missing)
+    if not hits:
+        return None, 0.0
+    count = sum(len(names) for names in missing.values())
+    ids = np.fromiter(hits, dtype=np.int64, count=len(hits))
+    fractions = np.fromiter(hits.values(), dtype=np.float32, count=len(hits)) / count
+    # Split the tag signal proportionally between model inputs and catalog-only chips.
+    weight = count / (len(chips) + int(has_movie_tags))
+    return (ids, fractions), weight
 
 
 def _plot_centroid(movie_ids: list[int]):
@@ -102,6 +130,7 @@ def build(req: RecommendRequest, timings: dict | None = None) -> Query:
     t0 = time.perf_counter()
     movie_part, missing_tag = _movie_tag_part(movie_ids)
     chip_part = _chip_part(chips)
+    exact_tags, exact_weight = _exact_tag_part(chips, has_movie_tags=movie_part is not None)
 
     tag_sparse = None
     parts = []
@@ -148,7 +177,7 @@ def build(req: RecommendRequest, timings: dict | None = None) -> Query:
     elif movie_centroid is not None:
         plot_query = movie_centroid
 
-    if tag_sparse is None and plot_query is None:
+    if tag_sparse is None and plot_query is None and exact_tags is None:
         raise EmptyQueryError(
             "No usable signal: selected movies have no tags/plot data, "
             "no plot text was provided, and the tag chips matched nothing in the vocabulary."
@@ -163,4 +192,6 @@ def build(req: RecommendRequest, timings: dict | None = None) -> Query:
         missing_tag_ids=missing_tag,
         missing_plot_ids=missing_plot,
         plot_text=req.plot_text,
+        exact_tags=exact_tags,
+        exact_tag_weight=exact_weight,
     )

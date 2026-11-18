@@ -83,8 +83,8 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
             <AsyncCombobox
               id="hero-movie-search"
               label="Search movies"
-              placeholder="Search by title (e.g. Inception, Interstellar, The Matrix...)"
-              minChars={3}
+              placeholder="Title or title and year, e.g. Inception 2010"
+              minChars={2}
               fetchOptions={searchMovies}
               onSelect={(m) => set({ movies: [...query.movies, m] })}
               getKey={(m) => String(m.id)}

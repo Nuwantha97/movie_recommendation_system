@@ -42,6 +42,7 @@ CROSS JOIN LATERAL (
     SELECT tag_type, name, movie_count
     FROM tag_lookup
     WHERE tag_type = ty.tag_type
+      AND length(name) BETWEEN 1 AND 100
       AND lower(name) LIKE %(contains)s
     ORDER BY (lower(name) LIKE %(prefix)s) DESC, length(name), name
     LIMIT %(per_type)s
@@ -55,6 +56,7 @@ CROSS JOIN LATERAL (
     SELECT tag_type, name, movie_count
     FROM tag_lookup
     WHERE tag_type = ty.tag_type
+      AND length(name) BETWEEN 1 AND 100
       AND (lower(name) LIKE %(contains)s OR lower(name) %% %(q)s::text)
     ORDER BY (lower(name) LIKE %(prefix)s) DESC,
              similarity(lower(name), %(q)s::text) DESC,

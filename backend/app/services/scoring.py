@@ -74,6 +74,12 @@ def score(pool_ids: list[int] | np.ndarray, q, timings: dict | None = None) -> S
                 nz = norms > 0
                 tag[pos[nz]] = dots[nz] / norms[nz]
                 tag_ok[pos[nz]] = True
+    if getattr(q, "exact_tags", None) is not None:
+        exact_ids, fractions = q.exact_tags
+        _, positions, matches = np.intersect1d(pool_arr, exact_ids, assume_unique=True, return_indices=True)
+        tag *= 1.0 - q.exact_tag_weight
+        tag[positions] += q.exact_tag_weight * fractions[matches]
+        tag_ok[positions] = True
     score_tag_time = round(time.perf_counter() - t0, 4)
     if timings is not None:
         timings["score_tag"] = score_tag_time

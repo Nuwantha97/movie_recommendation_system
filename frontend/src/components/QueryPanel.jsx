@@ -93,8 +93,8 @@ export default function QueryPanel({
         <AsyncCombobox
           id="movie-search-input"
           label="Search movies"
-          placeholder="Search by title"
-          minChars={3}
+          placeholder="Title or title and year, e.g. Up 2009"
+          minChars={2}
           fetchOptions={searchMovies}
           onSelect={(m) => set({ movies: [...query.movies, m] })}
           getKey={(m) => String(m.id)}

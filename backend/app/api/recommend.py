@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections import defaultdict
+from contextlib import AsyncExitStack
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
@@ -87,15 +88,16 @@ async def recommend_explanations(request: Request,
                                  response: Response,
                                  offset: int = Query(0, ge=0, lt=settings.max_results),
                                  limit: int = Query(20, ge=1, le=50)):
-    if offset % 20 != 0:
-        raise HTTPException(422, "offset must be a multiple of 20")
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     entry = _require(request_id)
     page = entry["ranked"][offset: offset + limit]
     ids = [r["movie_id"] for r in page]
     expl = entry["explanations"]
 
-    async with entry["locks"][offset]:      # concurrent calls for the same page share one Gemini call
+    async with AsyncExitStack() as locks:
+        # Overlapping pages share work. Disjoint pages can generate concurrently.
+        for mid in sorted(set(ids).difference(expl)):
+            await locks.enter_async_context(entry["locks"][mid])
         todo = [r for r in page if r["movie_id"] not in expl]
         if todo:
             movies = await asyncio.to_thread(queries.get_movies, [r["movie_id"] for r in todo])

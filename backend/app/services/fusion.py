@@ -48,8 +48,8 @@ def fuse(s, tag_weight: float, top_n: int, tie_break_plot: bool | None = None) -
         {
             "movie_id": int(ids[i]),
             "final_score": round(float(final[i]), 6),
-            "tag_score": round(float(tn[i]), 6),
-            "plot_score": round(float(pn[i]), 6),
+            "tag_score": round(float(tn[i]), 6) if s.tag_ok[i] else None,
+            "plot_score": round(float(pn[i]), 6) if s.plot_ok[i] else None,
         }
         for i in chosen
     ]

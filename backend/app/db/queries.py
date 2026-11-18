@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from psycopg import sql
 from app.db.pool import current_pool                                    # CHANGED
 
 from psycopg.rows import dict_row
@@ -89,6 +90,36 @@ ARRAY_COLS = (
     "music_composer", "keywords", "production_companies",
     "production_countries", "spoken_languages",
 )
+
+
+def exact_tag_hits(names_by_field: dict[str, set[str]]) -> dict[int, int]:
+    """Count selected catalog tags absent from the fitted model, once per movie and tag."""
+    hits = {}
+    with current_pool().connection() as conn:
+        for field, names in names_by_field.items():
+            if field not in ARRAY_COLS:
+                raise ValueError(f"Unknown movie tag field: {field}")
+            # Use catalog spelling for the case-sensitive array index.
+            rows = conn.execute(
+                "SELECT name FROM tag_lookup WHERE tag_type = %s AND lower(name) = ANY(%s)",
+                (field, list(names)),
+            )
+            canonical = [row["name"] for row in rows]
+            if not canonical:
+                continue
+            count = sql.SQL("1")
+            if len(names) > 1:
+                count = sql.SQL(
+                    "(SELECT count(DISTINCT lower(n)) FROM unnest({}) AS t(n) WHERE n = ANY(%(names)s))"
+                ).format(sql.Identifier(field))
+            statement = sql.SQL(
+                "SELECT id, {} AS hits FROM movies WHERE {} && %(names)s::text[]"
+            ).format(count, sql.Identifier(field))
+            for row in conn.execute(statement, {"names": canonical}):
+                mid = row["id"]
+                hits[mid] = hits.get(mid, 0) + row["hits"]
+    return hits
+
 
 def get_movies(ids: list[int]) -> dict[int, dict]:
     if not ids:
