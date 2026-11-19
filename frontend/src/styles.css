@@ -118,7 +118,7 @@ ul {
   height: 100%;
   object-fit: cover;
   object-position: center;
-  opacity: 0.62;
+  opacity: 0.40;
   filter: saturate(1.28) contrast(1.05) brightness(0.95);
   transform: scale(1.02);
 }
