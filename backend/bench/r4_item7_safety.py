@@ -21,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 def run_safety_test():
     from app.config import settings
+    from tests import db_helpers
 
     svd_path = settings.artifact_path / "tag_svd_model.joblib"
     svd_backup = settings.artifact_path / "tag_svd_model.joblib.bak"
@@ -41,14 +42,11 @@ def run_safety_test():
     # Step 2: Temporarily rename tags_vectors in Chroma SQLite
     print("\n--- Step 2: Rename tags_vectors collection in Chroma SQLite ---", flush=True)
     conn = sqlite3.connect(str(sqlite_path))
-    cur = conn.cursor()
-    cur.execute("SELECT id, name FROM collections")
-    collections_before = cur.fetchall()
+    collections_before = db_helpers.chroma_collections(conn)
     print(f"  Collections before rename: {collections_before}", flush=True)
-    cur.execute("UPDATE collections SET name = 'tags_vectors_hidden' WHERE name = 'tags_vectors'")
+    db_helpers.rename_chroma_collection(conn, "tags_vectors", "tags_vectors_hidden")
     conn.commit()
-    cur.execute("SELECT id, name FROM collections")
-    print(f"  Collections after rename: {cur.fetchall()}", flush=True)
+    print(f"  Collections after rename: {db_helpers.chroma_collections(conn)}", flush=True)
     conn.close()
 
     # Step 3: Boot FastAPI app with flag ON (production defaults)
@@ -130,11 +128,9 @@ def run_safety_test():
         print(f"  Restored {svd_backup.name} -> {svd_path.name}", flush=True)
 
     conn = sqlite3.connect(str(sqlite_path))
-    cur = conn.cursor()
-    cur.execute("UPDATE collections SET name = 'tags_vectors' WHERE name = 'tags_vectors_hidden'")
+    db_helpers.rename_chroma_collection(conn, "tags_vectors_hidden", "tags_vectors")
     conn.commit()
-    cur.execute("SELECT id, name FROM collections")
-    print(f"  Collections after restore: {cur.fetchall()}", flush=True)
+    print(f"  Collections after restore: {db_helpers.chroma_collections(conn)}", flush=True)
     conn.close()
 
     # Step 7: Test flag OFF (rollback path)

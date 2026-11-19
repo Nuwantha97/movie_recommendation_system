@@ -19,6 +19,7 @@ BACKEND_DIR = SCRIPT_DIR.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from tests import db_helpers
 from app.stores import artifacts, chroma
 from app.config import settings
 
@@ -28,9 +29,7 @@ def print_chroma_configs():
     print("=" * 60, flush=True)
     sqlite_path = os.path.join(settings.chroma_path, "chroma.sqlite3")
     conn = sqlite3.connect(sqlite_path)
-    cur = conn.cursor()
-    cur.execute("SELECT name, schema_str FROM collections")
-    for name, sstr in cur.fetchall():
+    for name, sstr in db_helpers.chroma_collection_schemas(conn):
         cfg = json.loads(sstr) if sstr else {}
         vec_cfg = cfg.get("defaults", {}).get("float_list", {}).get("vector_index", {}).get("config", {})
         hnsw = vec_cfg.get("hnsw", {})

@@ -11,7 +11,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("GEMINI_API_KEY", "dummy")
 
-from app.db.pool import open_pool, current_pool
+from app.db import queries
+from app.db.pool import open_pool
 from app.stores import artifacts, meta_index
 from app.config import settings
 from app.schemas import RecommendRequest
@@ -82,15 +83,7 @@ def main():
     for g in sorted_groups[:15]:
         sample_ids.extend(g[:3])
 
-    movie_meta = {}
-    with current_pool().connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, title, genres, release_date FROM movies WHERE id = ANY(%s);",
-                (sample_ids,)
-            )
-            for row in cur.fetchall():
-                movie_meta[row["id"]] = row
+    movie_meta = queries.get_movies(sample_ids)
 
     print("\nTop 15 Largest Identical Tag Vector Groups:")
     for rank, group in enumerate(sorted_groups[:15], 1):

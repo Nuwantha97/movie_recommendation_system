@@ -14,9 +14,15 @@ Env:   CHROMA_DIR, ARTIFACTS_DIR, DATABASE_URL, ALLOW_NO_META=1, MIN_RECALL (def
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import chromadb
 import numpy as np
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.db import queries
 
 CHROMA_DIR = os.environ.get("CHROMA_DIR", "/chroma_data")
 ARTIFACTS_DIR = os.path.join(os.environ.get("ARTIFACTS_DIR", "/artifacts"), "v1")
@@ -46,23 +52,16 @@ def load_metadata() -> dict:
             return {}
         sys.exit("DATABASE_URL not set. Filtered ANN needs metadata. "
                  "Set it, or set ALLOW_NO_META=1 to skip.")
-    import psycopg2
     meta = {}
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        with conn.cursor(name="meta_cur") as cur:  # server-side cursor
-            cur.itersize = 10000
-            cur.execute("SELECT id, original_language, release_date FROM movies")
-            for mid, lang, rd in cur:
-                m = {}
-                if lang:
-                    m["original_language"] = sys.intern(str(lang).lower())
-                if rd is not None:
-                    m["release_date"] = rd.year
-                if m:
-                    meta[int(mid)] = m
-    finally:
-        conn.close()
+    with queries.stream_chroma_metadata(DATABASE_URL) as rows:
+        for mid, lang, rd in rows:
+            m = {}
+            if lang:
+                m["original_language"] = sys.intern(str(lang).lower())
+            if rd is not None:
+                m["release_date"] = rd.year
+            if m:
+                meta[int(mid)] = m
     print(f"Loaded metadata for {len(meta):,} movies from Postgres", flush=True)
     return meta
 

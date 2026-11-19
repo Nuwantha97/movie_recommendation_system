@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.stores import meta_index
 
@@ -9,21 +9,7 @@ class TestGenreLimit(unittest.TestCase):
         # Create 33 mock genres
         mock_genres = [f"genre_{i}" for i in range(33)]
 
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.side_effect = [
-            [{"original_language": "en"}],
-            [{"g": g} for g in mock_genres],
-        ]
-        # Safeguard against infinite loops if exception is not raised
-        mock_cursor.fetchmany.return_value = []
-
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-
-        mock_pool = MagicMock()
-        mock_pool.connection.return_value.__enter__.return_value = mock_conn
-
-        with patch("app.stores.meta_index.current_pool", return_value=mock_pool):
+        with patch.object(meta_index.queries, "filter_vocabulary", return_value=(["en"], mock_genres)):
             with self.assertRaises(RuntimeError) as ctx:
                 meta_index.load_index()
 

@@ -37,8 +37,8 @@ logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
 from app.config import settings
 from app.db.pool import open_pool, close_pool
-from app.db import queries
-from app.db.queries import Filters, _where
+from tests import db_helpers
+from app.db.queries import Filters
 from app.schemas import RecommendRequest, TagIn
 from app.services import recommender, query_builder, candidates, scoring, fusion
 from app.stores import artifacts, chroma, text_embedder, meta_index
@@ -74,12 +74,7 @@ def get_match_count(req: RecommendRequest) -> int | None:
     f = Filters.from_request(req)
     if not f.active:
         return None
-    clauses, params = _where(f)
-    sql = "SELECT COUNT(*) FROM movies"
-    if clauses:
-        sql += " WHERE " + " AND ".join(clauses)
-    with queries.current_pool().connection() as conn:
-        return conn.execute(sql, params).fetchone()["count"]
+    return db_helpers.count_matches(f)
 
 
 def get_cases() -> dict[str, dict]:
