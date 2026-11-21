@@ -6,7 +6,7 @@ import Logo from "./components/Logo";
 import Footer from "./components/Footer";
 import bgFestivalTerrace from "./assets/images/bg_festival_terrace.jpg";
 import { isAbort, recommend, recommendPage, recommendExplanations } from "./api";
-import { INITIAL_QUERY, buildRequest, canSubmit } from "./query";
+import { INITIAL_QUERY, SELECTION_LIMITS, addSelection, buildRequest, canSubmit, withinSelectionLimits } from "./query";
 
 const STORAGE_PREFIX = "mf_movie_";
 const RESULTS_KEY = "mf_last_results";
@@ -93,6 +93,7 @@ export default function App() {
         requestId: cached.requestId ?? null,
         total: cached.total ?? 0,
         body: cached.body ?? null,
+        warnings: cached.warnings ?? [],
         page: cached.page ?? 1,
         pages: cached.pages ?? {},
         pageLoading: false,
@@ -144,11 +145,12 @@ export default function App() {
         requestId: state.requestId,
         total: state.total,
         body: state.body,
+        warnings: state.warnings,
         page: state.page,
         pages: state.pages,
       });
     }
-  }, [state.status, state.requestId, state.total, state.body, state.page, state.pages]);
+  }, [state.status, state.requestId, state.total, state.body, state.warnings, state.page, state.pages]);
 
   function navigateToMovie(movieItem) {
     const id = movieItem.movie?.id ?? movieItem.movie_id ?? movieItem.id;
@@ -179,27 +181,22 @@ export default function App() {
       if (q.movies.some((m) => String(m.id) === String(movie.id))) {
         return q;
       }
-      return {
-        ...q,
-        movies: [
-          ...q.movies,
-          {
-            id: movie.id,
-            title: movie.title || "Movie",
-            year: movie.year ?? movie.release_year ?? null,
-            poster_path: movie.poster_path ?? movie.movie?.poster_path ?? null,
-          },
-        ],
-      };
+      return addSelection(q, "movies", {
+        id: movie.id,
+        title: movie.title || "Movie",
+        year: movie.year ?? movie.release_year ?? null,
+        poster_path: movie.poster_path ?? movie.movie?.poster_path ?? null,
+      });
     });
     navigateToHome();
   }
 
-  async function loadExplanations(p, requestId, items) {
+  async function loadExplanations(p, requestId, items, signal, body) {
     if (items.every((m) => m.explanation)) return;
     setState((s) => ({ ...s, explaining: { ...s.explaining, [p]: true } }));
     try {
-      const map = await recommendExplanations(requestId, (p - 1) * PAGE_SIZE, PAGE_SIZE);
+      const map = await recommendExplanations(requestId, (p - 1) * PAGE_SIZE, PAGE_SIZE, signal);
+      if (signal.aborted) return;
       setState((s) => ({
         ...s,
         explaining: { ...s.explaining, [p]: false },
@@ -212,13 +209,9 @@ export default function App() {
         },
       }));
     } catch (err) {
+      if (signal.aborted || isAbort(err)) return;
       if (err.status === 410) {
-        try {
-          sessionStorage.removeItem(RESULTS_KEY);
-        } catch {
-          /* ignore */
-        }
-        await submit();
+        await submit(body);
         return;
       }
       setState((s) => ({ ...s, explaining: { ...s.explaining, [p]: false } }));
@@ -226,27 +219,27 @@ export default function App() {
   }
 
   async function goToPage(p) {
+    // Restored sessions get a controller on their first page request.
+    abortRef.current ??= new AbortController();
+    const { signal } = abortRef.current;
     resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     const have = state.pages[p];
     if (have) {
       // revisit: no request unless explanations failed earlier
       setState((s) => ({ ...s, page: p }));
-      loadExplanations(p, state.requestId, have);
+      loadExplanations(p, state.requestId, have, signal, state.body);
       return;
     }
     setState((s) => ({ ...s, page: p, pageLoading: true }));
     try {
-      const r = await recommendPage(state.requestId, (p - 1) * PAGE_SIZE, PAGE_SIZE);
+      const r = await recommendPage(state.requestId, (p - 1) * PAGE_SIZE, PAGE_SIZE, signal);
+      if (signal.aborted) return;
       setState((s) => ({ ...s, pageLoading: false, pages: { ...s.pages, [p]: r.items } }));
-      loadExplanations(p, state.requestId, r.items);
+      loadExplanations(p, state.requestId, r.items, signal, state.body);
     } catch (err) {
+      if (signal.aborted || isAbort(err)) return;
       if (err.status === 410) {
-        try {
-          sessionStorage.removeItem(RESULTS_KEY);
-        } catch {
-          /* ignore */
-        }
-        await submit();
+        await submit(state.body);
         return;
       } // cache expired: rebuild from page 1
       setState((s) => ({ ...s, pageLoading: false }));
@@ -273,21 +266,26 @@ export default function App() {
       const body = isCustom
         ? customBody
         : (canSubmit(query) ? buildRequest(query) : state.body) || buildRequest(query);
+      if (!withinSelectionLimits({ ...body, movies: body.movie_ids, languages: body.original_language })) {
+        throw new Error("This search exceeds the selection limits. Choose fewer items and search again.");
+      }
       const r = await recommend(body, controller.signal);
+      if (controller.signal.aborted) return;
       setState({
         status: "done",
         error: "",
         requestId: r.requestId,
         total: r.total,
+        warnings: r.warnings,
         body,
         page: 1,
         pages: { 1: r.items },
         pageLoading: false,
         explaining: {},
       });
-      loadExplanations(1, r.requestId, r.items);
+      loadExplanations(1, r.requestId, r.items, controller.signal, body);
     } catch (err) {
-      if (isAbort(err)) return;
+      if (controller.signal.aborted || isAbort(err)) return;
       if (err.fieldErrors) {
         setBackendErrors(err.fieldErrors);
       }
@@ -324,22 +322,7 @@ export default function App() {
 
   function clearFilters() {
     setQuery((q) => ({ ...q, languages: [], genres: [], dateFrom: "", dateTo: "" }));
-    setState({
-      status: "idle",
-      error: "",
-      requestId: null,
-      total: 0,
-      body: null,
-      page: 1,
-      pages: {},
-      pageLoading: false,
-      explaining: {},
-    });
-    try {
-      sessionStorage.removeItem(RESULTS_KEY);
-    } catch {
-      /* ignore */
-    }
+    clearResults();
   }
 
   return (
@@ -390,6 +373,7 @@ export default function App() {
             initialMovie={selectedMovie}
             onBack={navigateToHome}
             onSeedMovie={handleSeedMovie}
+            seedDisabled={query.movies.length >= SELECTION_LIMITS.movies}
           />
         </main>
       ) : (
@@ -409,6 +393,9 @@ export default function App() {
             }
           />
           <section className="results" ref={resultsRef} aria-live="polite">
+            {state.status === "done" && state.warnings?.map((warning) => (
+              <p key={warning} className="note">{warning}</p>
+            ))}
             <Results
               state={state}
               query={query}

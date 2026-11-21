@@ -15,7 +15,8 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("GEMINI_API_KEY", "dummy")
 
 from app.config import settings
-from app.db.pool import open_pool, current_pool
+from app.db import queries
+from app.db.pool import open_pool
 from app.stores import artifacts
 
 def main():
@@ -34,12 +35,7 @@ def main():
     # 1. Fetch thin overview IDs from Postgres
     print("\nFetching movie IDs with has_thin_overview = true from Postgres...", flush=True)
     t0 = time.perf_counter()
-    thin_ids = set()
-    with current_pool().connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM movies WHERE has_thin_overview = true;")
-            for row in cur.fetchall():
-                thin_ids.add(row["id"])
+    thin_ids = queries.thin_overview_ids()
     print(f"Found {len(thin_ids):,} movies with has_thin_overview = true in DB ({time.perf_counter() - t0:.2f}s)")
 
     # 2. Hash plot vectors to find groups with size >= 20

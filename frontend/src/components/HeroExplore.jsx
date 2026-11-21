@@ -1,5 +1,5 @@
 import { searchMovies } from "../api";
-import { canSubmit } from "../query";
+import { addSelection, canSubmit, SELECTION_LIMITS } from "../query";
 import AsyncCombobox from "./AsyncCombobox";
 import MoviePoster from "./MoviePoster";
 import ChipList from "./ChipList";
@@ -26,6 +26,7 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
   const plotLength = (query.plotText || "").length;
   const isPlotValid = plotLength === 0 || (plotLength >= 30 && plotLength <= 1000);
   const readyToSubmit = canSubmit(query) && isPlotValid && !loading;
+  const moviesFull = query.movies.length >= SELECTION_LIMITS.movies;
 
   function set(patch) {
     setQuery((prev) => ({ ...prev, ...patch }));
@@ -36,7 +37,7 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
     if (exists) {
       set({ movies: query.movies.filter((m) => m.id !== movie.id) });
     } else {
-      set({ movies: [...query.movies, movie] });
+      setQuery((q) => addSelection(q, "movies", movie));
     }
   }
 
@@ -78,15 +79,16 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
           <div className="hero-field">
             <label htmlFor="hero-movie-search" className="hero-field-label">
               <span>Movies you like</span>
-              <span className="hero-field-hint">Anchor signals</span>
+              <span className="hero-field-hint">{query.movies.length}/{SELECTION_LIMITS.movies}</span>
             </label>
             <AsyncCombobox
               id="hero-movie-search"
               label="Search movies"
-              placeholder="Search by title (e.g. Inception, Interstellar, The Matrix...)"
-              minChars={3}
+              placeholder="Title or title and year, e.g. Inception 2010"
+              minChars={2}
+              disabled={moviesFull}
               fetchOptions={searchMovies}
-              onSelect={(m) => set({ movies: [...query.movies, m] })}
+              onSelect={(m) => setQuery((q) => addSelection(q, "movies", m))}
               getKey={(m) => String(m.id)}
               isSelected={(m) => query.movies.some((x) => x.id === m.id)}
               renderOption={(m) => (
@@ -218,6 +220,7 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
                 className={`featured-movie-card ${isSelected ? "selected" : ""}`}
                 onClick={() => toggleMovie(movie)}
                 aria-pressed={isSelected}
+                disabled={moviesFull && !isSelected}
               >
                 <div className="featured-poster-wrap">
                   <MoviePoster

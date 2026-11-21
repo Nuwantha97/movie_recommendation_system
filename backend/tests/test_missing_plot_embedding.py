@@ -46,7 +46,18 @@ class TestMissingPlotEmbedding(unittest.TestCase):
             r_missing = ranked_map[missing_plot_id]
             expected_final = 0.5 * scores.tag[idx_missing]
             self.assertAlmostEqual(r_missing["final_score"], expected_final, places=6)
-            self.assertEqual(r_missing["plot_score"], 0.0)
+            self.assertIsNone(r_missing["plot_score"])
+
+    def test_missing_and_measured_zero_scores_in_the_response(self):
+        scores = Scores(
+            ids=np.array([1, 2, 3]),
+            tag=np.array([1., 0., 1.]), plot=np.array([0., 1., 0.]),
+            tag_ok=np.array([True, False, True]), plot_ok=np.array([False, True, True]),
+        )
+        rows = {r["movie_id"]: r for r in fusion.fuse(scores, tag_weight=0.5, top_n=3)}
+        self.assertIsNone(rows[1]["plot_score"])
+        self.assertIsNone(rows[2]["tag_score"])
+        self.assertEqual(rows[3]["plot_score"], 0.0)
 
     def test_neither_signal_dropped(self):
         """Movies with neither tag nor plot data are assigned -1 and dropped by fusion."""

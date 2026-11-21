@@ -173,13 +173,12 @@ export async function searchLanguages(q, signal) {
 // POST /api/recommend  ->  { results: [...] }
 // Long timeout (LLM explanations), no retry (expensive), never cached.
 export async function recommend(body, signal) {
-  console.log("Calling /recommend with body:", body);
   const data = await call({ url: "/recommend", method: "POST", data: body, signal, timeout: 120_000 });
-  console.log("Response from /recommend:", data);
   return {
     items: list(data, "results", "recommendations"),
     requestId: data.request_id ?? null,
     total: data.total ?? 0,
+    warnings: data.warnings ?? [],
   };
 }
 
@@ -187,7 +186,6 @@ export async function recommendPage(requestId, offset, limit = 20, signal) {
   const data = await call({
     url: `/recommend/${requestId}`,
     params: { offset, limit },
-    headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
     signal,
     timeout: 30_000,
   });
@@ -198,7 +196,6 @@ export async function recommendExplanations(requestId, offset, limit = 20, signa
   const data = await call({
     url: `/recommend/${requestId}/explanations`,
     params: { offset, limit },
-    headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" },
     signal,
     timeout: 60_000,
   });

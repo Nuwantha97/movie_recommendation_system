@@ -8,9 +8,10 @@ import random
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.db.pool import open_pool, close_pool, current_pool
-from app.db.queries import Filters, _where
+from app.db.pool import open_pool, close_pool
+from app.db.queries import Filters
 from app.stores import meta_index
+from tests.db_helpers import matching_movie_ids
 
 
 class TestMetaMask(unittest.TestCase):
@@ -79,26 +80,20 @@ class TestMetaMask(unittest.TestCase):
 
         self.assertGreaterEqual(len(test_cases), 50)
 
-        with current_pool().connection() as conn:
-            for c_idx, f in enumerate(test_cases):
-                # 1. In-memory mask
-                m = meta_index.mask_for(f)
-                mask_ids = set(idx.ids[m].tolist())
+        for c_idx, f in enumerate(test_cases):
+            # 1. In-memory mask
+            m = meta_index.mask_for(f)
+            mask_ids = set(idx.ids[m].tolist())
 
-                # 2. Postgres query
-                clauses, params = _where(f)
-                sql = "SELECT id FROM movies"
-                if clauses:
-                    sql += " WHERE " + " AND ".join(clauses)
-                rows = conn.execute(sql, params).fetchall()
-                pg_ids = set(int(r["id"]) for r in rows)
+            # 2. Postgres query
+            pg_ids = matching_movie_ids(f)
 
-                diff = mask_ids ^ pg_ids
-                self.assertEqual(
-                    len(diff),
-                    0,
-                    f"Test case #{c_idx} mismatch for filters {f}! Mask={len(mask_ids)}, Postgres={len(pg_ids)}. Mismatched IDs: {list(diff)[:10]}",
-                )
+            diff = mask_ids ^ pg_ids
+            self.assertEqual(
+                len(diff),
+                0,
+                f"Test case #{c_idx} mismatch for filters {f}! Mask={len(mask_ids)}, Postgres={len(pg_ids)}. Mismatched IDs: {list(diff)[:10]}",
+            )
 
         print(f"\n[OK] All {len(test_cases)} randomized filter test cases matched Postgres 100.000%!")
 

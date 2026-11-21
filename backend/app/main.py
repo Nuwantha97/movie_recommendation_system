@@ -18,6 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.config import settings
+from app.db import queries
 from app.db.pool import get_pool, open_pool, close_pool
 from app.schemas import RecommendRequest, TagIn
 from app.security import limiter
@@ -97,7 +98,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,      # explicit list, never "*"
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Cache-Control", "Pragma"],
     allow_credentials=False,
     max_age=600,
 )
@@ -112,6 +113,5 @@ app.include_router(recommend.router, prefix="/api")
 
 @app.get("/health")
 def health(pool: ConnectionPool = Depends(get_pool)):
-    with pool.connection() as conn:
-        conn.execute("SELECT 1")
+    queries.check_health(pool)
     return {"status": "ok"}

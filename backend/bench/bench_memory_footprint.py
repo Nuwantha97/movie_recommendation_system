@@ -19,6 +19,9 @@ BACKEND_DIR = SCRIPT_DIR.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from tests import db_helpers
+
+
 class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
     _fields_ = [
         ("cb", wintypes.DWORD),
@@ -47,16 +50,11 @@ def get_chroma_segment_size(coll_name):
     from app.config import settings
     sqlite_path = os.path.join(settings.chroma_path, "chroma.sqlite3")
     conn = sqlite3.connect(sqlite_path)
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT s.id FROM segments s JOIN collections c ON s.collection = c.id WHERE c.name = ? AND s.type = 'urn:chroma:segment/vector/hnsw-local-persisted'",
-        (coll_name,)
-    )
-    row = cur.fetchone()
+    segment_id = db_helpers.chroma_segment_id(conn, coll_name)
     conn.close()
-    if not row:
+    if segment_id is None:
         return 0
-    seg_dir = os.path.join(settings.chroma_path, row[0])
+    seg_dir = os.path.join(settings.chroma_path, segment_id)
     size = 0
     if os.path.exists(seg_dir):
         for root, dirs, files in os.walk(seg_dir):

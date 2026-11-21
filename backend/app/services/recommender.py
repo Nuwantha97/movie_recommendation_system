@@ -15,6 +15,7 @@ def _cleanup_query(q) -> None:
     if q is None:
         return
     q.tag_full_sims = None
+    q.exact_tags = None
     q.tag_sparse = None
     q.tag_ann = None
     q.plot_centroid = None

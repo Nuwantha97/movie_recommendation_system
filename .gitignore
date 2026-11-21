@@ -2,3 +2,20 @@
 **/.ipynb_checkpoints/
 .env
 /database/moviedb.sql.gz
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Keep Terraform dependency lock file
+!**/.terraform.lock.hcl

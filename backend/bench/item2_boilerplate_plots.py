@@ -14,7 +14,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("GEMINI_API_KEY", "dummy")
 
-from app.db.pool import open_pool, current_pool
+from tests import db_helpers
+from app.db.pool import open_pool
 from app.stores import artifacts, meta_index
 from app.schemas import RecommendRequest
 from app.services import recommender
@@ -65,18 +66,16 @@ def main():
     thin_overview_map = {}  # id -> bool
     text_to_ids = defaultdict(list)
 
-    with current_pool().connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, overview, has_thin_overview FROM movies;")
-            for row in cur.fetchall():
-                mid = row["id"]
-                ov = row["overview"] or ""
-                thin = bool(row["has_thin_overview"])
-                overview_map[mid] = ov
-                thin_overview_map[mid] = thin
-                # Group by exact overview text
-                h_text = hashlib.md5(ov.strip().encode("utf-8")).digest()
-                text_to_ids[h_text].append(mid)
+    with db_helpers.stream_overviews() as rows:
+        for row in rows:
+            mid = row["id"]
+            ov = row["overview"] or ""
+            thin = bool(row["has_thin_overview"])
+            overview_map[mid] = ov
+            thin_overview_map[mid] = thin
+            # Group by exact overview text
+            h_text = hashlib.md5(ov.strip().encode("utf-8")).digest()
+            text_to_ids[h_text].append(mid)
 
     print(f"Fetched {len(overview_map):,} movies from Postgres in {time.perf_counter() - t0:.2f}s", flush=True)
     text_groups_ge_5 = [g for g in text_to_ids.values() if len(g) >= 5]

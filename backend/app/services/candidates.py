@@ -239,6 +239,29 @@ def _generate_matvec(
 
 
 def generate(req, q, timings: dict | None = None) -> np.ndarray:
+    exact = getattr(q, "exact_tags", None)
+    if exact is None or req.tag_weight == 0:
+        return _generate(req, q, timings)
+
+    # An exact filtered pool already contains every matching catalog ID.
+    pool = np.empty(0, dtype=np.int64)
+    if q.tag_sparse is not None or q.plot_centroid is not None:
+        pool = _generate(req, q, timings)
+        if getattr(q, "_meta_rows", None) is not None:
+            return pool
+    ids = exact[0]
+    filters = Filters.from_request(req)
+    if filters.active:
+        if meta_index.is_loaded():
+            ids = meta_index.filter_ids_with_mask(ids, filters)
+        else:
+            ids = np.fromiter(queries.filter_ids(ids.tolist(), filters), dtype=np.int64)
+    if q.movie_ids:
+        ids = ids[~np.isin(ids, q.movie_ids)]
+    return _unique_ordered(pool, ids)
+
+
+def _generate(req, q, timings: dict | None = None) -> np.ndarray:
     """Candidate generation using vectorized metadata mask and parallel ANN or matvec.
     Keeps candidates as a numpy int64 array throughout.
     """

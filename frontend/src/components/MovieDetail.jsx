@@ -22,7 +22,7 @@ function formatDate(dateStr) {
   }
 }
 
-export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie }) {
+export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie, seedDisabled }) {
   const [fetchedMovie, setFetchedMovie] = useState(null);
   const [loading, setLoading] = useState(!initialMovie);
   const [error, setError] = useState("");
@@ -148,6 +148,7 @@ export default function MovieDetail({ movieId, initialMovie, onBack, onSeedMovie
           <button
             type="button"
             className="btn-seed"
+            disabled={seedDisabled}
             onClick={() =>
               onSeedMovie({
                 id: movieData?.id ?? movieId,

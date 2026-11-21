@@ -6,7 +6,7 @@ from typing import NamedTuple, Any
 
 import numpy as np
 
-from app.db.pool import current_pool
+from app.db import queries
 from app.db.queries import Filters
 from app.stores import artifacts
 from app.stores.artifacts import SortedIdIndex
@@ -74,16 +74,7 @@ def load_index() -> MetaIndex:
     log.info("Loading MetaIndex from Postgres...")
 
     # Fetch unique genres and languages first to establish code mappings
-    with current_pool().connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SET statement_timeout = '60s'")
-            cur.execute("SELECT DISTINCT original_language FROM movies WHERE original_language IS NOT NULL")
-            raw_langs = [r["original_language"].strip().lower() for r in cur.fetchall() if r["original_language"]]
-            all_langs = sorted(list(set(raw_langs)))
-
-            cur.execute("SELECT DISTINCT unnest(genres) as g FROM movies WHERE genres IS NOT NULL")
-            raw_genres = [r["g"].strip().lower() for r in cur.fetchall() if r["g"]]
-            all_genres = sorted(list(set(raw_genres)))
+    all_langs, all_genres = queries.filter_vocabulary()
 
     if len(all_genres) > 32:
         raise RuntimeError(
@@ -103,39 +94,32 @@ def load_index() -> MetaIndex:
     date_list: list[int] = []
     genre_list: list[int] = []
 
-    with current_pool().connection() as conn:
-        conn.execute("SET statement_timeout = '120s'")
-        with conn.cursor(name="meta_stream") as cur:
-            cur.execute("SELECT id, original_language, release_date, genres FROM movies ORDER BY id")
-            while True:
-                chunk = cur.fetchmany(50000)
-                if not chunk:
-                    break
-                for r in chunk:
-                    mid = int(r["id"])
-                    id_list.append(mid)
+    with queries.stream_movie_metadata() as rows:
+        for r in rows:
+            mid = int(r["id"])
+            id_list.append(mid)
 
-                    lang = r["original_language"]
-                    lang_list.append(lang_to_code.get(lang.strip().lower(), 0) if lang else 0)
+            lang = r["original_language"]
+            lang_list.append(lang_to_code.get(lang.strip().lower(), 0) if lang else 0)
 
-                    d = r["release_date"]
-                    if d:
-                        year_list.append(d.year)
-                        date_list.append(d.toordinal())
-                    else:
-                        year_list.append(-1)
-                        date_list.append(0)
+            d = r["release_date"]
+            if d:
+                year_list.append(d.year)
+                date_list.append(d.toordinal())
+            else:
+                year_list.append(-1)
+                date_list.append(0)
 
-                    g_arr = r["genres"]
-                    if g_arr:
-                        gmask = 0
-                        for g in g_arr:
-                            b = genre_to_bit.get(g.strip().lower())
-                            if b:
-                                gmask |= b
-                        genre_list.append(gmask)
-                    else:
-                        genre_list.append(0)
+            g_arr = r["genres"]
+            if g_arr:
+                gmask = 0
+                for g in g_arr:
+                    b = genre_to_bit.get(g.strip().lower())
+                    if b:
+                        gmask |= b
+                genre_list.append(gmask)
+            else:
+                genre_list.append(0)
 
     n = len(id_list)
     ids = np.array(id_list, dtype=np.int64)
