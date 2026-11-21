@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Single-EC2 temporary deploy controller for private RDS and DVC snapshots.
-
-Required: run as root; Python deps in /opt/movie-recs/venv;
-trusted repo under /opt/movie-recs/movie_recommendation_system.
-Neither database credentials nor DagsHub credentials are ever sent from GitHub.
-"""
+"""Deploy the selected DVC snapshots and backend release on EC2."""
 from __future__ import annotations
 
 import gzip
@@ -13,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -20,12 +16,14 @@ from urllib.parse import quote
 
 import psycopg
 from psycopg import sql
-from dotenv import dotenv_values
+from psycopg.types.json import Jsonb
 
 ROOT = Path(__file__).resolve().parents[2]
-STATE = Path('/var/lib/movie-recs/deploy-state.json')
-SECRETS_FILE = Path(os.environ.get('MOVIE_DEPLOY_ENV', '/etc/movie-recs/deploy.env'))
+DATA = Path('/var/lib/movie-recs')
+RELEASES = Path('/opt/movie-recs/releases')
+LEGACY_REPO = Path('/opt/movie-recs/movie_recommendation_system')
 CA = Path('/etc/movie-recs/global-bundle.pem')
+DEPLOY_ENV = Path('/etc/movie-recs/deploy.env')
 SLOTS = ('moviedb_blue', 'moviedb_green')
 COMPOSE = ROOT / 'compose.ec2.yml'
 BACKUP = ROOT / 'database/moviedb.sql.gz'
@@ -38,27 +36,49 @@ def say(message: str):
     print(message, flush=True)
 
 
-def load_secrets() -> dict[str, str]:
-    if not SECRETS_FILE.is_file():
-        raise RuntimeError(f'Missing EC2-only secrets file: {SECRETS_FILE}')
-    if SECRETS_FILE.stat().st_mode & 0o077:
-        raise RuntimeError(f'Secrets file must be mode 600: {SECRETS_FILE}')
-    data = {k: v for k, v in dotenv_values(SECRETS_FILE).items() if v is not None}
-    required = ('RDS_HOST', 'RDS_ADMIN_USER', 'RDS_ADMIN_PASSWORD', 'RDS_APP_USER',
-                'RDS_APP_PASSWORD', 'DAGSHUB_USER', 'DAGSHUB_TOKEN', 'GEMINI_API_KEY',
-                'ALLOWED_HOSTS', 'CORS_ORIGINS')
-    for key in required:
-        if not data.get(key) or data[key].startswith('REPLACE_') or 'XXXXXXXX' in data[key]:
-            raise RuntimeError(f'Configure {key} in {SECRETS_FILE}')
-    for key in ('ALLOWED_HOSTS', 'CORS_ORIGINS'):
-        values = json.loads(data[key])
-        if not isinstance(values, list) or not values or not all(isinstance(x, str) for x in values):
-            raise RuntimeError(f'{key} must be a JSON list of strings')
-    if data['RDS_APP_USER'] == data['RDS_ADMIN_USER']:
-        raise RuntimeError('Use different PostgreSQL users for administration and the app')
-    if not CA.is_file():
-        raise RuntimeError(f'Missing RDS trust bundle: {CA}')
-    return data
+def read_secret(secret_id: str) -> str:
+    raw = subprocess.check_output(['aws', 'secretsmanager', 'get-secret-value',
+                                   '--secret-id', secret_id, '--query', 'SecretString',
+                                   '--output', 'text'])
+    return raw.decode('utf-8-sig')
+
+
+def env_values(text: str) -> dict:
+    values = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        key, separator, value = line.partition('=')
+        if not separator or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key.strip()):
+            raise ValueError(f'Invalid KEY=value on deploy.env line {number}')
+        value = value.strip()
+        if len(value) >= 2 and value[0] in ("\"", "'") and value[-1] == value[0]:
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def load_secrets() -> dict:
+    admin = json.loads(read_secret(os.environ['MASTER_SECRET_ARN']))
+    if DEPLOY_ENV.exists():
+        info = DEPLOY_ENV.stat()
+        if info.st_uid != 0 or info.st_mode & 0o077:
+            raise ValueError(f'{DEPLOY_ENV} must be owned by root and private (chmod 600)')
+        runtime = env_values(DEPLOY_ENV.read_text(encoding='utf-8-sig'))
+    else:
+        raw = read_secret(os.environ['RUNTIME_SECRET_NAME'])
+        runtime = json.loads(raw) if raw.lstrip().startswith('{') else env_values(raw)
+    keys = ('RDS_APP_PASSWORD', 'DAGSHUB_USER', 'DAGSHUB_TOKEN', 'GEMINI_API_KEY')
+    for key in keys:
+        if not isinstance(runtime.get(key), str) or not runtime[key]:
+            raise ValueError(f'Missing {key} in the runtime secret')
+    user = runtime.get('RDS_APP_USER', 'app_ro')
+    if user == admin['username']:
+        raise ValueError('The application role must be separate from the RDS admin')
+    return {**{key: runtime[key] for key in keys}, 'RDS_APP_USER': user,
+            'RDS_ADMIN_USER': admin['username'], 'RDS_ADMIN_PASSWORD': admin['password'],
+            'RDS_HOST': os.environ['RDS_HOST'], 'RDS_PORT': os.environ['RDS_PORT']}
 
 
 def dvc_md5(path: Path) -> str:
@@ -69,28 +89,35 @@ def dvc_md5(path: Path) -> str:
     return match.group(1)
 
 
-def load_state() -> dict:
-    return json.loads(STATE.read_text()) if STATE.is_file() else {}
+def save_state(conn, state: dict):
+    conn.execute('INSERT INTO public.movie_recs_deployment (id, state) VALUES (1, %s) '
+                 'ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state', (Jsonb(state),))
 
 
-def save_state(state: dict):
-    STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    temp = STATE.with_suffix('.tmp')
-    fd = os.open(temp, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
-    try:
-        with os.fdopen(fd, 'w') as out:
-            json.dump(state, out, indent=2, sort_keys=True)
-            out.write('\n')
-            out.flush()
-            os.fsync(out.fileno())
-        os.replace(temp, STATE)
-    finally:
-        temp.unlink(missing_ok=True)
+def load_state(conn, secrets: dict) -> dict:
+    # The admin database retains the active slot even when EC2 is replaced.
+    conn.execute('CREATE TABLE IF NOT EXISTS public.movie_recs_deployment '
+                 '(id integer PRIMARY KEY CHECK (id = 1), state jsonb NOT NULL)')
+    row = conn.execute('SELECT state FROM public.movie_recs_deployment WHERE id = 1').fetchone()
+    if row:
+        return row[0]
+    legacy = DATA / 'deploy-state.json'
+    state = json.loads(legacy.read_text()) if legacy.is_file() else {}
+    occupied = [db for db in SLOTS if database_exists(secrets, db)]
+    if occupied and state.get('active_db') not in occupied:
+        raise RuntimeError('Existing RDS slots have no matching deployment record')
+    if state and state.get('active_db') not in occupied:
+        raise RuntimeError('Local deployment record does not match this RDS instance')
+    # Claim the empty slots before the first restore so a failed import is retryable.
+    save_state(conn, state)
+    return state
 
 
 def call(cmd: list[str], *, env: dict | None = None, cwd: Path = ROOT):
     # Never log arguments: DVC credential configuration can contain secrets.
-    subprocess.run(cmd, cwd=cwd, env=env, check=True)
+    result = subprocess.run(cmd, cwd=cwd, env=env)
+    if result.returncode:
+        raise RuntimeError(f'{cmd[0]} exited with status {result.returncode}')
 
 
 def admin_connect(s: dict, db: str = 'postgres'):
@@ -108,16 +135,15 @@ def database_exists(s: dict, db: str) -> bool:
         return cur.fetchone() is not None
 
 
-def provision_role(s: dict, *, initial: bool):
+def provision_role(s: dict):
     with admin_connect(s) as conn, conn.cursor() as cur:
-        cur.execute('SELECT 1 FROM pg_roles WHERE rolname = %s', (s['RDS_APP_USER'],))
-        if cur.fetchone():
-            if initial:
-                cur.execute(sql.SQL('ALTER ROLE {} LOGIN PASSWORD {}').format(
-                    sql.Identifier(s['RDS_APP_USER']), sql.Literal(s['RDS_APP_PASSWORD'])))
-        else:
+        cur.execute('SELECT rolcanlogin FROM pg_roles WHERE rolname = %s', (s['RDS_APP_USER'],))
+        role = cur.fetchone()
+        if role is None:
             cur.execute(sql.SQL('CREATE ROLE {} LOGIN PASSWORD {}').format(
                 sql.Identifier(s['RDS_APP_USER']), sql.Literal(s['RDS_APP_PASSWORD'])))
+        elif not role[0]:
+            raise RuntimeError('The configured application role already exists without LOGIN')
 
 
 def rebuild_inactive_database(s: dict, inactive: str):
@@ -137,8 +163,8 @@ def setup_app_grants(s: dict, db: str):
         cur.execute(sql.SQL('GRANT USAGE ON SCHEMA public TO {}').format(sql.Identifier(s['RDS_APP_USER'])))
         cur.execute(sql.SQL('GRANT SELECT ON TABLE public.movies, public.tag_lookup TO {}').format(
             sql.Identifier(s['RDS_APP_USER'])))
-        cur.execute(sql.SQL('ALTER ROLE {} SET statement_timeout = {}').format(
-            sql.Identifier(s['RDS_APP_USER']), sql.Literal('15s')))
+        cur.execute(sql.SQL('ALTER ROLE {} IN DATABASE {} SET statement_timeout = {}').format(
+            sql.Identifier(s['RDS_APP_USER']), sql.Identifier(db), sql.Literal('15s')))
 
 
 def postgres_env(s: dict, db: str) -> dict:
@@ -204,181 +230,176 @@ def validate_database(s: dict, db: str):
         say(f'Validation passed: movies={movies:,}, tag_lookup={tags:,}')
 
 
-def download_assets(s: dict, initial: bool):
-    say('Configuring DagsHub HTTPS basic auth in local (untracked) DVC config')
-    # Never write live Chroma SQLite files through hardlinked DVC cache entries.
-    call(['dvc', 'config', '--local', 'cache.type', 'copy'])
-    call(['dvc', 'remote', 'modify', '--local', 'origin', 'auth', 'basic'])
-    call(['dvc', 'remote', 'modify', '--local', 'origin', 'user', s['DAGSHUB_USER']])
-    call(['dvc', 'remote', 'modify', '--local', 'origin', 'password', s['DAGSHUB_TOKEN']])
-    local_cfg = ROOT / '.dvc/config.local'
-    if local_cfg.exists():
-        local_cfg.chmod(0o600)
-    targets = ['database/moviedb.sql.gz.dvc']
-    if initial:
-        targets += ['backend/artifacts/v1.dvc', 'backend/chroma_data.dvc']
-    say('DVC pull: ' + ', '.join(targets))
-    call(['dvc', 'pull', *targets])
-    if initial:
-        if not (ROOT / 'backend/artifacts/v1').is_dir():
-            raise RuntimeError('Recommendation artifacts missing')
-        chroma_data = ROOT / 'backend/chroma_data'
-        if not chroma_data.is_dir() or not (chroma_data / 'chroma.sqlite3').is_file():
-            raise RuntimeError('DVC ChromaDB collection missing chroma.sqlite3')
+def prepare_assets(s: dict, candidate: dict, restore: bool):
+    # Each DVC pointer is checked out in this release, then atomically published.
+    # Writable Chroma data must never share inodes with the DVC cache.
+    assets = DATA / 'assets'
+    assets.mkdir(mode=0o700, exist_ok=True)
+    pulls = []
+    for pointer, key, sentinel in (
+        (ARTIFACT_DVC, 'artifact_md5', 'tag_matrix.npz'),
+        (CHROMA_DVC, 'chroma_md5', 'chroma.sqlite3'),
+    ):
+        dest = assets / candidate[key]
+        if not (dest / sentinel).is_file():
+            pulls.append((pointer, dest, sentinel))
+    targets = [str(path.relative_to(ROOT)) for path, _, _ in pulls]
+    if restore:
+        targets.append(str(BACKUP_DVC.relative_to(ROOT)))
+    if not targets:
+        return
+    dvc = [sys.executable, '-m', 'dvc']
+    call([*dvc, 'config', '--local', 'cache.type', 'copy'])
+    config = ROOT / '.dvc/config.local'
+    try:
+        for key, value in [('auth', 'basic'), ('user', s['DAGSHUB_USER']),
+                           ('password', s['DAGSHUB_TOKEN'])]:
+            call([*dvc, 'remote', 'modify', '--local', 'origin', key, value])
+        call([*dvc, 'pull', '--force', *targets])
+        for pointer, dest, sentinel in pulls:
+            src = pointer.with_suffix('')
+            if not (src / sentinel).is_file():
+                raise RuntimeError(f'Missing {sentinel} from {pointer.name}')
+            src.rename(dest)
+    finally:
+        config.unlink(missing_ok=True)
+        shutil.rmtree(ROOT / '.dvc/cache', ignore_errors=True)
 
 
-def compose_env(s: dict, db: str) -> dict:
-    def encoded(value: str) -> str:
-        return quote(value, safe='')
-    url = (
-        f"postgresql://{encoded(s['RDS_APP_USER'])}:{encoded(s['RDS_APP_PASSWORD'])}"
-        f"@{s['RDS_HOST']}:{s.get('RDS_PORT', '5432')}/{db}"
-        '?sslmode=verify-full&sslrootcert=%2Frds-ca.pem'
-    )
+def compose_env(s: dict, release: dict) -> dict:
+    user = quote(s['RDS_APP_USER'], safe='')
+    password = quote(s['RDS_APP_PASSWORD'], safe='')
+    db = release['active_db']
+    site = release.get('site', os.environ['SITE_ADDRESS'])
+    url = (f"postgresql://{user}:{password}@{s['RDS_HOST']}:{s['RDS_PORT']}/{db}"
+           "?sslmode=verify-full&sslrootcert=%2Frds-ca.pem")
     return {
         **os.environ, 'DATABASE_URL': url, 'GEMINI_API_KEY': s['GEMINI_API_KEY'],
-        'SITE_ADDRESS': s.get('SITE_ADDRESS', ':80'),
-        'ALLOWED_HOSTS': s['ALLOWED_HOSTS'], 'CORS_ORIGINS': s['CORS_ORIGINS'],
-        'FORWARDED_ALLOW_IPS': s.get('FORWARDED_ALLOW_IPS', '127.0.0.1'),
-        'LOG_LEVEL': s.get('LOG_LEVEL', 'INFO'),
+        'ALLOWED_HOSTS': json.dumps([site.removeprefix('http://'), '127.0.0.1', 'localhost']),
+        'CADDYFILE': 'Caddyfile.cloudfront' if site.startswith('http://') else 'Caddyfile',
+        'SITE_ADDRESS': site, 'CORS_ORIGINS': release.get('origins', os.environ['CORS_ORIGINS']),
+        'RELEASE_SHA': release['git_sha'],
+        'ARTIFACT_PATH': str(DATA / 'assets' / release['artifact_md5']),
+        'CHROMA_PATH': str(DATA / 'assets' / release['chroma_md5']),
     }
 
 
-def compose(cmd: list[str], env: dict):
-    call(['docker', 'compose', '-f', str(COMPOSE), *cmd], env=env)
+def compose_args(root: Path) -> list[str]:
+    return ['docker', 'compose', '-f', str(root / 'compose.ec2.yml')]
 
 
-def frontend_build_if_needed(previous_sha: str | None):
-    frontend_dist = ROOT / 'frontend/dist/index.html'
-    changed = not frontend_dist.is_file()
-    if previous_sha and not changed:
-        result = subprocess.run(['git', 'diff', '--quiet', previous_sha, 'HEAD', '--', 'frontend'], cwd=ROOT)
-        changed = result.returncode != 0
-    if changed:
-        say('Building Vite frontend using Node 22 Docker image')
-        call(['docker', 'run', '--rm', '-v', f'{ROOT / "frontend"}:/work',
-              '-w', '/work', 'node:22-alpine', 'sh', '-ec', 'npm ci && npm run build'])
+def image_exists(tag: str) -> bool:
+    return subprocess.run(['docker', 'image', 'inspect', tag], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
 
 
-def check_backend_health(env: dict, max_wait: int = 360):
-    say('Waiting for FastAPI readiness and DB-backed search endpoints')
-    # Checks internal service directly; Caddy routes /api/* but not /health.
-    test = r'''import json, urllib.parse, urllib.request
-base = 'http://127.0.0.1:8000'
+def start_and_check(root: Path, env: dict):
+    cmd = compose_args(root)
+    call(cmd + ['up', '-d', '--no-build', 'backend', 'proxy'], env=env)
+    say('Waiting for FastAPI warmup and database-backed searches')
+    test = """import json, urllib.request
 for path in ['/health', '/api/movies/search?q=matrix&limit=1', '/api/tags/search?q=action&types=genres']:
-    with urllib.request.urlopen(base + path, timeout=15) as response:
-        obj = json.load(response)
-        assert response.status == 200
-        if path == '/health': assert obj.get('status') == 'ok'
-        else: assert isinstance(obj, list)
-'''
-    end = time.monotonic() + max_wait
-    while time.monotonic() < end:
-        result = subprocess.run([
-            'docker', 'compose', '-f', str(COMPOSE), 'exec', '-T',
-            'backend', 'python', '-c', test,
-        ], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if result.returncode == 0:
-            say('FastAPI database-backed health tests passed')
-            return
+    with urllib.request.urlopen('http://127.0.0.1:8000' + path, timeout=15) as response:
+        value = json.load(response)
+        assert value == {'status': 'ok'} if path == '/health' else isinstance(value, list) and value
+"""
+    deadline = time.monotonic() + 900
+    while time.monotonic() < deadline:
+        if subprocess.run(cmd + ['exec', '-T', 'backend', 'python', '-c', test],
+                          env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            break
         time.sleep(10)
-    raise RuntimeError('FastAPI did not pass readiness + movies/tags checks within 360 seconds')
+    else:
+        raise RuntimeError('Backend readiness timed out. Inspect docker logs movies_backend')
+    call(cmd + ['exec', '-T', 'proxy', 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile'], env=env)
+    if root != LEGACY_REPO:
+        site = env['SITE_ADDRESS']
+        origin = site if site.startswith('http://') else f'https://{site}'
+        host = origin.split('://', 1)[1]
+        port = 80 if site.startswith('http://') else 443
+        call(['curl', '--fail', '--silent', '--show-error', '--output', '/dev/null',
+              '--resolve', f'{host}:{port}:127.0.0.1', '--retry', '24', '--retry-delay', '5',
+              '--retry-all-errors', '--max-time', '12', f'{origin}/health'])
 
 
-def deploy_image(s: dict, database: str, old_database: str | None):
-    new_env = compose_env(s, database)
-    old_env = compose_env(s, old_database) if old_database else None
-    old_image = subprocess.run(
-        ['docker', 'image', 'inspect', 'movie-recs-backend:current'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    ).returncode == 0
-    if old_image:
-        call(['docker', 'tag', 'movie-recs-backend:current', 'movie-recs-backend:rollback'])
+def rollback(s: dict, state: dict):
+    if state.get('active_db'):
+        old_root = RELEASES / state['git_sha']
+        tag = state['git_sha']
+        if not old_root.is_dir() and 'site' not in state and LEGACY_REPO.is_dir():
+            old_root = LEGACY_REPO
+            tag = 'current'
+        if old_root.is_dir() and image_exists('movie-recs-backend:' + tag):
+            say(f"Restoring release {state['git_sha']} on {state['active_db']}")
+            start_and_check(old_root, compose_env(s, state))
+            return
+    # Fresh or replacement host without a previous image. Stop any failed candidate.
+    call(['docker', 'compose', '-f', str(COMPOSE), 'stop', 'proxy', 'backend'],
+         env=compose_env(s, state['pending']))
+
+
+def cleanup(candidate: dict, previous: dict):
+    keep = [item for item in (candidate, previous) if item.get('git_sha')]
+    hashes = {item[key] for item in keep for key in ('artifact_md5', 'chroma_md5')}
+    for path in (DATA / 'assets').iterdir():
+        if re.fullmatch(r'[a-f0-9]{32}\.dir', path.name) and path.name not in hashes:
+            shutil.rmtree(path)
+    for path in RELEASES.iterdir():
+        if re.fullmatch(r'[a-f0-9]{40}', path.name) and all(path.name != x['git_sha'] for x in keep):
+            shutil.rmtree(path)
+            subprocess.run(['docker', 'image', 'rm', 'movie-recs-backend:' + path.name],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def deploy(conn, s: dict):
+    state = load_state(conn, s)
+    old = state.get('active_db')
+    digest = hashlib.sha256(s['RDS_APP_PASSWORD'].encode()).hexdigest()
+    if old and (old not in SLOTS or digest != state.get('app_password_sha256')
+                or state.get('app_user', s['RDS_APP_USER']) != s['RDS_APP_USER']):
+        raise RuntimeError('Check the active slot and application login before deploying')
+    if 'pending' in state:
+        rollback(s, state)
+        state.pop('pending')
+        save_state(conn, state)
+    backup = dvc_md5(BACKUP_DVC)
+    restore = not old or state.get('backup_md5') != backup
+    target = next(db for db in SLOTS if db != old) if restore else old
+    candidate = dict(active_db=target, backup_md5=backup, git_sha=os.environ['RELEASE_SHA'],
+                     artifact_md5=dvc_md5(ARTIFACT_DVC), chroma_md5=dvc_md5(CHROMA_DVC),
+                     app_user=s['RDS_APP_USER'], app_password_sha256=digest, site=os.environ['SITE_ADDRESS'],
+                     origins=os.environ['CORS_ORIGINS'])
+    env = compose_env(s, candidate)
+    prepare_assets(s, candidate, restore)
+    if restore:
+        provision_role(s)
+        restore_dump(s, target)
+        validate_database(s, target)
+        setup_app_grants(s, target)
+        BACKUP.unlink()
+    image = 'movie-recs-backend:' + candidate['git_sha']
+    if not image_exists(image):
+        call(['docker', 'build', '--build-arg', 'CPU_ONLY=true', '-t', image, 'backend'])
+    pending = {**state, 'pending': candidate}
+    save_state(conn, pending)
     try:
-        compose(['build', 'backend'], new_env)
-        compose(['up', '-d', '--no-build', '--force-recreate', 'backend', 'proxy'], new_env)
-        check_backend_health(new_env)
-        # In addition to API readiness, verify that Caddy's configured reverse proxy is valid.
-        compose(['exec', '-T', 'proxy', 'caddy', 'validate', '--config', '/etc/caddy/Caddyfile'], new_env)
+        start_and_check(ROOT, env)
     except Exception:
-        say('Cutover failed. Attempting automatic backend rollback...')
-        if old_env and old_image:
-            call(['docker', 'tag', 'movie-recs-backend:rollback', 'movie-recs-backend:current'])
-            compose(['up', '-d', '--no-build', '--force-recreate', 'backend', 'proxy'], old_env)
-            check_backend_health(old_env)
-            say(f'Rollback validated: active database is still {old_database}')
-        else:
-            say('No previous healthy backend image/database available: manual recovery required')
+        rollback(s, pending)
+        save_state(conn, state)
         raise
+    save_state(conn, candidate)
+    say(f"Promoted {candidate['git_sha']} using {target}")
+    cleanup(candidate, state)
 
 
 def main():
-    if os.geteuid() != 0:
-        raise RuntimeError('Run via sudo or SSM as root (protected secrets/state)')
     s = load_secrets()
-    current_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    state = load_state()
-    pw_fingerprint = hashlib.sha256(s['RDS_APP_PASSWORD'].encode()).hexdigest()
-    if state.get('active_db') and state.get('app_password_sha256') != pw_fingerprint:
-        raise RuntimeError('App database password changed or state lacks fingerprint. Rotate passwords separately; refusing live deployment.')
-    old = state.get('active_db')
-    if old and old not in SLOTS:
-        raise RuntimeError('Unexpected active database in state file; refusing to replace anything')
-    if not old and any(database_exists(s, name) for name in SLOTS):
-        raise RuntimeError('Existing blue/green DB found without state. Refusing automatic first deployment.')
-    backup_hash = dvc_md5(BACKUP_DVC)
-    artifact_hash = dvc_md5(ARTIFACT_DVC)
-    chroma_hash = dvc_md5(CHROMA_DVC)
-    # Replacing embedded artifacts/Chroma while the current backend is using them is unsafe.
-    if old and (artifact_hash != state.get('artifact_md5') or chroma_hash != state.get('chroma_md5')):
-        raise RuntimeError('ML artifacts or Chroma DVC hash changed. Stop automatic DB-only deploy; migrate artifacts as a separate release.')
-    if old and backup_hash == state.get('backup_md5') and current_sha == state.get('git_sha'):
-        say('Same source commit and same deployed backup hash; no action required')
-        return
-    stage = next(name for name in SLOTS if name != old)
-    db_changed = not old or backup_hash != state.get('backup_md5')
-    say(f'Current active database: {old or "none"}. Target: {stage if db_changed else old}')
-    # Build and validate the frontend before changing the inactive database.
-    frontend_build_if_needed(os.environ.get('PREVIOUS_SOURCE_SHA'))
-    if db_changed:
-        download_assets(s, initial=not old)
-        provision_role(s, initial=not old)
-        restore_dump(s, stage)
-        validate_database(s, stage)
-        setup_app_grants(s, stage)
-        target = stage
-    else:
-        target = old
-    deploy_image(s, target, old)
-    # This state file is the promotion marker. Only write AFTER successful app health.
-    # If a disk/state write fails after cutover, return to old backend and old database.
-    promoted = {
-        'active_db': target,
-        'backup_md5': backup_hash,
-        'artifact_md5': artifact_hash,
-        'chroma_md5': chroma_hash,
-        'git_sha': current_sha,
-        'app_password_sha256': pw_fingerprint,
-        'previous_active_db': old,
-        'previous_backup_md5': state.get('backup_md5') if old else None,
-        'previous_git_sha': state.get('git_sha') if old else None,
-    }
-    try:
-        save_state(promoted)
-    except Exception:
-        if old:
-            say('Promotion marker failed; attempting to restore old backend/db')
-            call(['docker', 'tag', 'movie-recs-backend:rollback', 'movie-recs-backend:current'])
-            previous_env = compose_env(s, old)
-            compose(['up', '-d', '--no-build', '--force-recreate', 'backend', 'proxy'], previous_env)
-            check_backend_health(previous_env)
-        raise
-    say(f'PROMOTED: {target}; previous database retained as rollback slot')
+    with admin_connect(s) as conn:
+        if not conn.execute("SELECT pg_try_advisory_lock(192047, 1)").fetchone()[0]:
+            raise RuntimeError('Another RDS deployment is in progress')
+        deploy(conn, s)
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except Exception as error:
-        print(f'DEPLOYMENT_FAILED: {type(error).__name__}: {error}', file=sys.stderr, flush=True)
-        sys.exit(1)
+    main()

@@ -1,0 +1,16 @@
+{$SITE_ADDRESS} {
+	request_body {
+		max_size 16KB
+	}
+	# CloudFront appends the viewer's address after any client-supplied addresses.
+	@edge header_regexp viewer X-Forwarded-For "(^|, *) *([0-9a-fA-F:.]+)$"
+	reverse_proxy @edge backend:8000 {
+		header_up X-Forwarded-For {re.viewer.2}
+		header_up X-Forwarded-Proto https
+	}
+	reverse_proxy backend:8000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+	}
+}

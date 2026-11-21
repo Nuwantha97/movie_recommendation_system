@@ -140,7 +140,7 @@ Serving the existing catalog was tested on Windows with **7.8 GiB of usable RAM*
 | [backend/scripts/](backend/scripts/) | Chroma initialization and artifact utilities. |
 | [backend/tests/](backend/tests/) and [backend/bench/](backend/bench/) | Regression tests and catalog-scale performance checks. |
 | [database/](database/) and [Notebooks/](Notebooks/) | Catalog dump pointer, role setup, and dataset preprocessing. |
-| [deploy/](deploy/) | Linux bootstrap and Caddy configuration. |
+| [deploy/](deploy/) | Production deployment controller and Caddy configuration. |
 
 Run the frontend checks from the repository root.
 
@@ -157,17 +157,7 @@ python -m unittest tests.test_catalog_search tests.test_explanation_pages
 
 ## Production deployment
 
-The `prod` Compose profile adds Caddy on ports 80 and 443. Caddy serves `frontend/dist` and forwards `/api/*` to FastAPI. Prepare the catalog and build the frontend first. Before public deployment, address the hostname, database-role, and restore issues identified in the [deployment review](REVIEW.md#deployment).
-
-- Set `APP_ENV=prod` and configure `ALLOWED_HOSTS` and `CORS_ORIGINS` as JSON lists for your hostname and frontend origin. Set `FORWARDED_ALLOW_IPS` to the trusted proxy address or subnet.
-- Pass `SITE_ADDRESS` into the `proxy` service environment for Caddy to receive the public hostname. Configure the backend service’s `DATABASE_URL` with a read-only login. The checked-in Compose file constructs it from the PostgreSQL initialization account.
-- The Linux [bootstrap script](deploy/bootstrap.sh) downloads data, imports the catalog, builds the UI, and starts the stack. Its restore check tests for the existence of the `movies` table. Verify catalog contents after an interrupted import. Supply your own credential when provisioning a login with the [role script](database/create_app_role.sql).
-
-After configuring the production services, run from the repository root. The explicit Compose file selects the production stack without the development port override.
-
-```bash
-docker compose -f docker-compose.yml --profile prod up -d --build
-```
+With the repository variable `DEPLOY_ENABLED` set to `true`, pushes affecting deployment inputs on `main` deploy the frontend to Cloudflare Pages and the API to AWS EC2. You can also run **Deploy production** manually on `main` with the same switch enabled. GitHub Actions applies Terraform, fetches the DVC snapshots from DagsHub on EC2, and restores the catalog to private RDS when its pointer changes. See the [production setup and recovery guide](deploy/aws/README.md) for the one-time account settings and release checks.
 
 ## License
 

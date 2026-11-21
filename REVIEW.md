@@ -21,14 +21,14 @@ The updated system served the existing catalog of 1,186,821 movies on a Windows 
 
 ## Deployment
 
-These findings come from the checked-in deployment files. Testing used the existing local database.
+These findings describe the deployment files reviewed on 18 November 2026. Testing used the existing local database. The current AWS and Cloudflare deployment is documented in the [production guide](deploy/aws/README.md).
 
 | Impact | Finding | Evidence |
 | --- | --- | --- |
-| High | The documented local and manual production commands leave a fresh PostgreSQL volume without the movie catalog. Pulling the dump places it on disk. Neither command imports it, and the database service has no initialization mount. Movie search and recommender startup require the missing tables. The automated bootstrap has a separate restore step. | [README.md](README.md#L10), [docker-compose.yml](docker-compose.yml#L12) and [bootstrap.sh](deploy/bootstrap.sh#L144) |
+| High | The documented local and manual production commands leave a fresh PostgreSQL volume without the movie catalog. Pulling the dump places it on disk. Neither command imports it, and the database service has no initialization mount. Movie search and recommender startup require the missing tables. The automated bootstrap has a separate restore step. | [README.md](README.md#L10), [docker-compose.yml](docker-compose.yml#L12) and [bootstrap.sh](https://github.com/dilminidasunika/movie_recommendation_system/blob/b4018acb03c833480640d4deea6a1e088daa65ee/deploy/bootstrap.sh#L144) |
 | High | The production proxy ignores the configured public hostname. Caddy reads `SITE_ADDRESS` from its container environment, but Compose never passes that variable to the proxy. Caddy therefore uses its `localhost` fallback. | [docker-compose.yml](docker-compose.yml#L57) and [Caddyfile](deploy/Caddyfile#L1) |
 | High | The deployed backend connects with the PostgreSQL initialization account, which has administrator privileges. Compose constructs the connection string from that account even when the documented read-only role has been created. The role creation script also assigns the same hard-coded password on each installation. | [docker-compose.yml](docker-compose.yml#L32) and [create_app_role.sql](database/create_app_role.sql#L2) |
-| Medium | An interrupted catalog restore can be treated as complete. Bootstrap checks only whether the `movies` table exists. A failure after table creation can leave an incomplete catalog that the next run skips. The import also omits `ON_ERROR_STOP`, allowing SQL errors to go unreported by the shell. | [bootstrap.sh](deploy/bootstrap.sh#L138) |
+| Medium | An interrupted catalog restore can be treated as complete. Bootstrap checks only whether the `movies` table exists. A failure after table creation can leave an incomplete catalog that the next run skips. The import also omits `ON_ERROR_STOP`, allowing SQL errors to go unreported by the shell. | [bootstrap.sh](https://github.com/dilminidasunika/movie_recommendation_system/blob/b4018acb03c833480640d4deea6a1e088daa65ee/deploy/bootstrap.sh#L138) |
 
 ## Verification
 
