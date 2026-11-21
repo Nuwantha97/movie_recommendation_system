@@ -11,6 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /srv
 
 COPY requirements.txt .
+ARG CPU_ONLY=false
+RUN if [ "$CPU_ONLY" = true ]; then \
+      pip install --no-cache-dir 'torch==2.15.0+cpu' --index-url https://download.pytorch.org/whl/cpu; \
+    fi
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app

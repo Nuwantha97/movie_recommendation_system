@@ -3,8 +3,7 @@
 name: movie-recs
 services:
   backend:
-    image: movie-recs-backend:current
-    build: ./backend
+    image: movie-recs-backend:${RELEASE_SHA:?}
     container_name: movies_backend
     # DVC supplies the existing ChromaDB collection. Do not run Dockerfile's
     # scripts.init_chroma (which would rebuild large collections on a small EC2).
@@ -18,7 +17,7 @@ services:
       CHROMA_DIR: /chroma_data
       CORS_ORIGINS: ${CORS_ORIGINS:?provided by deployment controller}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:?provided by deployment controller}
-      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      FORWARDED_ALLOW_IPS: "172.30.71.2"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
@@ -27,11 +26,15 @@ services:
       VECLIB_MAXIMUM_THREADS: "1"
     expose:
       - "8000"
+    networks:
+      api:
+        ipv4_address: 172.30.71.3
     volumes:
-      - ./backend/artifacts:/artifacts:ro
+      - ${ARTIFACT_PATH:?}:/artifacts/v1:ro
       # The real Chroma collections are in DVC, NOT an empty Docker volume.
       # Chroma's SQLite metadata is writable; keep DVC cache in copy mode.
-      - ./backend/chroma_data:/chroma_data:rw
+      - ${CHROMA_PATH:?}:/chroma_data:rw
+      - model_cache:/root/.cache/huggingface
       - /etc/movie-recs/global-bundle.pem:/rds-ca.pem:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
@@ -48,13 +51,15 @@ services:
     container_name: movies_proxy
     restart: unless-stopped
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      SITE_ADDRESS: ${SITE_ADDRESS:?}
     ports:
       - "80:80"
       - "443:443"
+    networks:
+      api:
+        ipv4_address: 172.30.71.2
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./frontend/dist:/srv/frontend:ro
+      - ./deploy/aws/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -63,6 +68,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+networks:
+  api:
+    ipam:
+      config:
+        - subnet: 172.30.71.0/24
 volumes:
+  model_cache:
   caddy_data:
   caddy_config:

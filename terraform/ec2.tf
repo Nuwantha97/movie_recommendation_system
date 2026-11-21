@@ -27,7 +27,17 @@ resource "aws_instance" "backend" {
 
   user_data = file("${path.module}/userdata.sh")
 
+  lifecycle {
+    # A new public AMI is used on the next deliberate instance replacement.
+    ignore_changes = [ami]
+  }
+
   tags = {
     Name = "${var.project_name}-backend"
   }
+}
+
+resource "aws_eip" "backend" {
+  domain   = "vpc"
+  instance = aws_instance.backend.id
 }

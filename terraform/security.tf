@@ -15,6 +15,16 @@ resource "aws_vpc_security_group_egress_rule" "ec2_outbound" {
   ip_protocol       = "-1"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "web" {
+  for_each          = var.use_cloudfront_api ? toset(["80"]) : toset(["80", "443"])
+  security_group_id = aws_security_group.ec2.id
+  cidr_ipv4         = var.use_cloudfront_api ? null : "0.0.0.0/0"
+  prefix_list_id    = var.use_cloudfront_api ? data.aws_ec2_managed_prefix_list.cloudfront[0].id : null
+  ip_protocol       = "tcp"
+  from_port         = tonumber(each.value)
+  to_port           = tonumber(each.value)
+}
+
 resource "aws_security_group" "rds" {
   name_prefix = "${var.project_name}-rds-"
   description = "Private PostgreSQL access"
