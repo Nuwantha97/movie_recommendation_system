@@ -71,7 +71,7 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_db_subnet_group" "main" {
-  name = "${var.project_name}-db-subnets"
+  name_prefix = "${var.project_name}-db-subnets-"
 
   subnet_ids = [
     aws_subnet.private_a.id,
