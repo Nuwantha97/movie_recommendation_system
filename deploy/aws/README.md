@@ -24,9 +24,11 @@ In **Settings → Secrets and variables → Actions → Variables**, set the **r
 
    If you already use a different remote state key or workspace, align the checked-in backend and workflow with that state first. Copy any local non-secret Terraform input overrides to the GitHub variable `TF_VARS_JSON`. Check that the plan recognizes your existing resources.
 
-2. Configure AWS IAM federation for GitHub with audience `sts.amazonaws.com`. Give the deployment role a maximum session duration of **3 hours**. The trust policy template targets this repository's `production` environment. Restrict the environment to `main` in GitHub. [Trust policy template](github-oidc-policy.example.json)
+2. Restrict the GitHub `production` environment to `main`. For IAM user authentication, add the user's access key ID and matching secret access key as the environment secrets `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. When the key ID is set, the workflow uses that key pair directly.
 
-   The runner role needs your Terraform provisioning permissions for the VPC, EC2, Elastic IP, RDS, release S3 bucket, instance profile and EC2 role declared in `terraform/`, including permission to pass that instance role. It also needs access to list the state bucket, read/write the state object, and read/write/delete the corresponding `.tflock` object. For application delivery, allow `s3:PutObject` for `movie-recs-release-*/releases/*`, `ssm:DescribeInstanceInformation`, `ssm:GetCommandInvocation`, and `ssm:SendCommand` for the account's backend instance and AWS's `AWS-RunShellScript` document. The EC2 instance reads the two runtime secrets with its own Terraform-managed role.
+   For OIDC authentication, leave the access key secrets unset and configure AWS IAM federation for GitHub with audience `sts.amazonaws.com`. Give the deployment role a maximum session duration of at least **3 hours**. The trust policy template targets this repository's `production` environment. [Trust policy template](github-oidc-policy.example.json)
+
+   The deployment user or role needs your Terraform provisioning permissions for the VPC, EC2, Elastic IP, RDS, release S3 bucket, instance profile and EC2 role declared in `terraform/`, including permission to pass that instance role. It also needs access to list the state bucket, read/write the state object, and read/write/delete the corresponding `.tflock` object. For application delivery, allow `s3:PutObject` for `movie-recs-release-*/releases/*`, `ssm:DescribeInstanceInformation`, `ssm:GetCommandInvocation`, and `ssm:SendCommand` for the account's backend instance and AWS's `AWS-RunShellScript` document. The EC2 instance reads the two runtime secrets with its own Terraform-managed role.
 
 3. Create an AWS Secrets Manager secret named **`movie-recommendation/production`** in the deployment region. If you override `project_name`, use `<project_name>/production`. Use the default Secrets Manager encryption key or add the appropriate customer-managed KMS decrypt permission to EC2. Store the following JSON with actual values. Use a dedicated database login and keep its password stable between releases. When upgrading an existing deployment, use its existing login and password. RDS supplies and rotates its separate admin secret. [RDS password management](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html)
 
@@ -54,7 +56,9 @@ In **Settings → Secrets and variables → Actions → Variables**, set the **r
 
    | Type | Name | Value |
    | --- | --- | --- |
-   | Secret | `AWS_DEPLOY_ROLE_ARN` | GitHub OIDC role from step 2 |
+   | Secret | `AWS_ACCESS_KEY_ID` | IAM user's access key ID when using access keys |
+   | Secret | `AWS_SECRET_ACCESS_KEY` | Matching secret access key when using access keys |
+   | Secret | `AWS_DEPLOY_ROLE_ARN` | Deployment role ARN when using OIDC |
    | Secret | `CLOUDFLARE_ACCOUNT_ID` | Account that owns the Pages project |
    | Secret | `CLOUDFLARE_API_TOKEN` | Pages Edit on that account, plus DNS Edit on the selected zone for automatic DNS |
    | Variable | `TF_STATE_BUCKET` | Optional override for an existing state bucket. Leave unset for automatic creation and reuse |
