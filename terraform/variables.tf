@@ -24,7 +24,7 @@ variable "ec2_instance_type" {
 
 variable "rds_instance_class" {
   type    = string
-  default = "db.t3.small"
+  default = "db.t3.micro"
 }
 
 variable "db_name" {
