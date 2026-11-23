@@ -43,8 +43,8 @@ services:
       OPENBLAS_NUM_THREADS: "1"
       NUMEXPR_NUM_THREADS: "1"
       VECLIB_MAXIMUM_THREADS: "1"
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend/artifacts:/artifacts:ro
       - chroma_data:/chroma_data

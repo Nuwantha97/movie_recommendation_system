@@ -1,7 +1,7 @@
 import Logo from "./Logo";
 
 const SPONSOR_URL = "https://github.com/sponsors/Nuwantha97";
-const GITHUB_REPO_URL = "https://github.com/";
+const GITHUB_REPO_URL = "https://github.com/dilminidasunika/movie_recommendation_system";
 
 export default function Footer({ hasStickySubmit = false }) {
   return (
