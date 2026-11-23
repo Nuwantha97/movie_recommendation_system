@@ -62,7 +62,7 @@ export default function HeroExplore({ query, setQuery, onSubmit, loading }) {
           <p className="hero-kicker">Dual-Signal Cinema Intelligence</p>
           <h2 className="hero-headline">Discover Movies You&apos;ll Truly Love</h2>
           <p className="hero-subheading">
-            DualLens synthesizes <strong>thematic metadata tags</strong> with <strong>semantic plot narratives</strong> to deliver calibrated, personalized recommendations with zero guesswork.
+            Pick a movie you like or describe a story you want to see. DualLens compares <strong>movie plots</strong> and <strong>tags like genres and keywords</strong> to find similar movies.
           </p>
         </div>
       </div>
