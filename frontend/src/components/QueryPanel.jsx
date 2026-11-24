@@ -41,6 +41,7 @@ function ToggleGroup({ legend, options, selected, limit, onToggle }) {
 export default function QueryPanel({
   query,
   setQuery,
+  onClearAll,
   onSubmit,
   loading,
   backendErrors = {},
@@ -50,6 +51,7 @@ export default function QueryPanel({
     typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : true
   );
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchResetKey, setSearchResetKey] = useState(0);
 
   useEffect(() => {
     const mql = window.matchMedia("(min-width: 1024px)");
@@ -86,8 +88,22 @@ export default function QueryPanel({
       }}
     >
       <div className="field">
-        <label htmlFor="movie-search-input">Movies you like ({query.movies.length}/{SELECTION_LIMITS.movies})</label>
+        <div className="field-header">
+          <label htmlFor="movie-search-input">Movies you like ({query.movies.length}/{SELECTION_LIMITS.movies})</label>
+          <button
+            type="button"
+            className="secondary panel-clear"
+            disabled={loading}
+            onClick={() => {
+              onClearAll();
+              setSearchResetKey((key) => key + 1);
+            }}
+          >
+            Clear all
+          </button>
+        </div>
         <AsyncCombobox
+          key={searchResetKey}
           id="movie-search-input"
           label="Search movies"
           placeholder="Title or title and year, e.g. Up 2009"
@@ -170,6 +186,7 @@ export default function QueryPanel({
       <div className="field">
         <label htmlFor="tag-search-input">People, keywords and more ({query.tags.length}/{SELECTION_LIMITS.tags})</label>
         <AsyncCombobox
+          key={searchResetKey}
           id="tag-search-input"
           label="Search tags"
           placeholder="Director, cast, keyword, country"
@@ -241,6 +258,7 @@ export default function QueryPanel({
           <div className="field">
             <label htmlFor="lang-search-input">Original language ({query.languages.length}/{SELECTION_LIMITS.languages})</label>
             <AsyncCombobox
+              key={searchResetKey}
               id="lang-search-input"
               label="Search original language"
               placeholder="Search by name or code, e.g. tamil or ta"

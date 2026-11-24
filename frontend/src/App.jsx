@@ -383,6 +383,10 @@ export default function App() {
           <QueryPanel
             query={query}
             setQuery={setQuery}
+            onClearAll={() => {
+              setQuery(INITIAL_QUERY);
+              setBackendErrors({});
+            }}
             onSubmit={submit}
             loading={state.status === "loading"}
             backendErrors={backendErrors}

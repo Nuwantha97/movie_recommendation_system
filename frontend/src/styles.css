@@ -774,6 +774,10 @@ button.secondary:hover {
   background: #DBEAFE;
 }
 
+button.panel-clear {
+  margin-top: 0;
+}
+
 /* Collapsible Filters section (tablet/mobile) */
 .filters-details {
   border: 1px solid var(--line);
