@@ -1940,6 +1940,10 @@ details summary {
   align-items: center;
 }
 
+.layout > .hero-banner {
+  display: none;
+}
+
 .hero-banner-bg {
   position: absolute;
   inset: 0;
@@ -2405,6 +2409,11 @@ details summary {
 
 /* Tablet (601px - 1023px) */
 @media (max-width: 1023px) {
+  .layout > .hero-banner {
+    display: flex;
+  }
+
+  .hero-explore-container > .hero-banner,
   .hero-search-console {
     display: none;
   }

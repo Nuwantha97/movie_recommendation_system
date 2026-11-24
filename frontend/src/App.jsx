@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import QueryPanel from "./components/QueryPanel";
+import HeroBanner from "./components/HeroBanner";
 import Results from "./components/Results";
 import MovieDetail from "./components/MovieDetail";
 import Logo from "./components/Logo";
@@ -378,6 +379,7 @@ export default function App() {
         </main>
       ) : (
         <main className="layout">
+          {state.status === "idle" && <HeroBanner />}
           <QueryPanel
             query={query}
             setQuery={setQuery}
