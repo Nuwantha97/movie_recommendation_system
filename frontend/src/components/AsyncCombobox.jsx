@@ -57,7 +57,7 @@ export default function AsyncCombobox({
 
   const visible = (current?.items ?? []).filter((o) => !isSelected(o)).slice(0, MAX_VISIBLE);
   const showPanel = !disabled && open && query.length >= minChars &&
-    (showEmptyMessage || visible.length > 0 || currentStatus === "error");
+    (currentStatus !== "idle" || showEmptyMessage || visible.length > 0);
 
   function pick(item) {
     onSelect(item);

@@ -10,14 +10,40 @@ flowchart TD
     Chips[Selected tags] --> Tags
     Seeds --> Plot[Plot query vector]
     Text[User plot description] --> Plot
-    Tags --> Retrieve[Candidate selection]
-    Plot --> Retrieve
-    Filters[Genre, language and date filters] --> Retrieve
-    Retrieve --> Score[Score eligible movies on both signals]
+    Chips -->|Exact tag matches| Select
+    Tags --> Select[Candidate selection]
+    Plot --> Select
+    Filters[Genre, language and date filters] --> Select
+    Select --> Score[Compute tag and plot scores where available]
     Score --> Rank[Weighted ranking]
     Rank --> Page[Movie details and scores for this page]
     Page -. Later request .-> Explain[Gemini explanations]
 ```
+
+<details>
+<summary>Candidate selection flowchart</summary>
+
+```mermaid
+flowchart TD
+    Scope{Search scope}
+    Scope -->|Filters active| Mask[Build eligibility mask and count matches]
+    Mask -->|0 matches| Empty[Return an empty page]
+    Mask -->|1 to 300,000 matches| All[Use all eligible movies except selected movies]
+    Mask -->|More than 300,000 matches| Shortlists[Retrieve shortlists for active signals]
+    Scope -->|No filters| Shortlists
+    Shortlists --> TagSearch[Select top tag matches from eligible rows]
+    Shortlists --> PlotSearch[Find plot neighbors in Chroma and apply filters]
+    PlotSearch --> Retry[Retry with up to 20,000 neighbors if fewer than 1,000 survive broad filters]
+    TagSearch --> Merge[Merge shortlists, deduplicate and exclude selected movies]
+    Retry --> Merge
+    Merge --> Fallback{"Too few candidates with filters active and at most 700,000 eligible?"}
+    Fallback -->|Yes| All
+    Fallback -->|No| Pool[Finalize candidate pool]
+    All --> Pool
+    ExactTags[PostgreSQL lookup for tags outside the vocabulary] -->|Add eligible matches if needed and tag weight is positive| Pool
+```
+
+</details>
 
 ### Turning a request into two vectors
 
@@ -32,14 +58,16 @@ Filters define eligibility. For example, selecting *science fiction or drama*, E
 | Query scope | Default retrieval behavior |
 | --- | --- |
 | Filters leave 300,000 movies or fewer | Score every eligible movie. A movie that matches both signals moderately well can still reach the top even if it would miss either signal’s individual shortlist. |
-| No filters, or a broader eligible set | For a two-signal query, run sparse tag matrix multiplication and Chroma approximate nearest-neighbor plot search concurrently. The default retrieval depths are 10,000 tag matches and 5,000 plot neighbors. Merge the candidate IDs, remove duplicates, and enforce eligibility. |
-| Too few candidates survive broad filters | If an active signal yields fewer than 1,000 survivors or the combined pool falls below 2,000, the backend can score the entire filtered set, up to a default ceiling of 700,000 eligible movies. |
+| No filters, or a broader eligible set | For a two-signal query, run sparse tag matrix multiplication and Chroma approximate nearest-neighbor plot search concurrently. The default retrieval depths are 10,000 tag matches and 5,000 plot neighbors. With filters active, select tag matches from eligible rows and apply the eligibility mask to the plot neighbors after retrieval. Merge the two lists, deduplicate, and exclude selected movies. |
+| Too few candidates survive broad filters | If fewer than 1,000 plot neighbors survive, retry with up to 20,000 neighbors. After the retry, if an active signal still yields fewer than 1,000 survivors or the merged pool falls below 2,000, use the entire filtered set when it contains at most 700,000 movies. |
+
+With positive tag weight, exact PostgreSQL tag matches can supplement the shortlist or supply the entire candidate pool when no query vector is available. A full filtered scan already includes all eligible exact matches.
 
 The broader search trades some recall for less scoring work. A film outside both shortlists can miss the final ranking even if its combined score would have been competitive. These thresholds are implementation defaults. [Candidate selection](backend/app/services/candidates.py) · [Ranking settings](backend/app/config.py)
 
 ### Computing the final score
 
-For each candidate, the backend computes tag cosine similarity using the original sparse features and reuses tag scores already computed during retrieval where available. For plots it computes the dot product of normalized vectors, which equals cosine similarity. Chroma helps find candidates, while final plot scoring reads precomputed vectors from a memory-mapped file in row order, in batches of up to 8,192. This bounds the size of the temporary embedding array. [Candidate scoring](backend/app/services/scoring.py)
+For each candidate, the backend computes tag cosine similarity using the original sparse features and reuses tag scores already computed during retrieval where available. When selected tags fall outside the fitted vocabulary, it blends the cosine score with the fraction of those tags matched in PostgreSQL. For plots it computes the dot product of normalized vectors, which equals cosine similarity. Chroma helps find candidates, while final plot scoring reads precomputed vectors from a memory-mapped file in row order, in batches of up to 8,192. This bounds the size of the temporary embedding array. [Candidate scoring](backend/app/services/scoring.py)
 
 ```text
 final score = tag weight × tag similarity + (1 − tag weight) × plot similarity
@@ -67,15 +95,19 @@ A separate request asks Gemini to explain the films on that page. Its payload in
 
 ```mermaid
 flowchart TD
-    Actions[GitHub Actions on main] --> Infra[Terraform provisions AWS resources]
+    Actions[Enabled release on main via push or manual dispatch] --> Infra[Terraform applies AWS configuration]
     Infra --> Build[Vite builds frontend with API URL]
-    Build --> Archive[Backend source archive in S3]
-    Archive -->|Systems Manager dispatch| EC2[EC2 release controller]
-    DVC[DVC snapshots on DagsHub] -->|Missing assets| EC2
-    EC2 -->|Changed catalog| RDS[(Inactive PostgreSQL database on RDS)]
-    EC2 --> API[Caddy and FastAPI on EC2]
-    API --> Gate[Public API and browser-origin check]
+    Build --> Archive[Upload backend release archive to S3]
+    Archive --> EC2[Systems Manager dispatches EC2 release controller]
+    DVC[DVC snapshots on DagsHub] -->|Missing assets or catalog restore| EC2
+    EC2 --> Catalog{"First release or changed catalog?"}
+    Catalog -->|Yes| RDS[(Restore and validate inactive RDS database)]
+    Catalog -->|No| Active[Reuse active RDS database]
+    RDS --> API[Start Caddy and FastAPI and run readiness checks]
+    Active --> API
+    API -->|Release passes EC2 checks| Gate[Check public movie search and CORS]
     Gate --> Pages[Publish frontend to Cloudflare Pages]
+    Pages --> Verify[Verify Pages serves the expected JavaScript bundle]
 ```
 
 
