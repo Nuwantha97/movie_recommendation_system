@@ -10,35 +10,40 @@ flowchart TD
     Chips[Selected tags] --> Tags
     Seeds --> Plot[Plot query vector]
     Text[User plot description] --> Plot
-    Chips --> ExactTags[PostgreSQL lookup for tags outside the vocabulary]
-    Tags --> Scope
-    Plot --> Scope
-    Filters[Genre, language and date filters] --> Scope
-
-    subgraph Selection[Candidate selection]
-        Scope{Search scope}
-        Scope -->|Filters active| Mask[Build eligibility mask and count matches]
-        Mask -->|0 matches| Empty[Return an empty page]
-        Mask -->|1 to 300,000 matches| All[Use all eligible movies except selected movies]
-        Mask -->|More than 300,000 matches| Shortlists[Retrieve shortlists for active signals]
-        Scope -->|No filters| Shortlists
-        Shortlists --> TagSearch[Select top tag matches from eligible rows]
-        Shortlists --> PlotSearch[Find plot neighbors in Chroma and apply filters]
-        PlotSearch --> Retry[Retry with up to 20,000 neighbors if fewer than 1,000 survive broad filters]
-        TagSearch --> Merge[Merge shortlists, deduplicate and exclude selected movies]
-        Retry --> Merge
-        Merge --> Fallback{"Too few candidates with filters active and at most 700,000 eligible?"}
-        Fallback -->|Yes| All
-        Fallback -->|No| Pool[Finalize candidate pool]
-        All --> Pool
-        ExactTags -->|Add eligible matches if needed and tag weight is positive| Pool
-    end
-
-    Pool --> Score[Compute tag and plot scores where available]
+    Chips -->|Exact tag matches| Select
+    Tags --> Select[Candidate selection]
+    Plot --> Select
+    Filters[Genre, language and date filters] --> Select
+    Select --> Score[Compute tag and plot scores where available]
     Score --> Rank[Weighted ranking]
     Rank --> Page[Movie details and scores for this page]
     Page -. Later request .-> Explain[Gemini explanations]
 ```
+
+<details>
+<summary>Candidate selection flowchart</summary>
+
+```mermaid
+flowchart TD
+    Scope{Search scope}
+    Scope -->|Filters active| Mask[Build eligibility mask and count matches]
+    Mask -->|0 matches| Empty[Return an empty page]
+    Mask -->|1 to 300,000 matches| All[Use all eligible movies except selected movies]
+    Mask -->|More than 300,000 matches| Shortlists[Retrieve shortlists for active signals]
+    Scope -->|No filters| Shortlists
+    Shortlists --> TagSearch[Select top tag matches from eligible rows]
+    Shortlists --> PlotSearch[Find plot neighbors in Chroma and apply filters]
+    PlotSearch --> Retry[Retry with up to 20,000 neighbors if fewer than 1,000 survive broad filters]
+    TagSearch --> Merge[Merge shortlists, deduplicate and exclude selected movies]
+    Retry --> Merge
+    Merge --> Fallback{"Too few candidates with filters active and at most 700,000 eligible?"}
+    Fallback -->|Yes| All
+    Fallback -->|No| Pool[Finalize candidate pool]
+    All --> Pool
+    ExactTags[PostgreSQL lookup for tags outside the vocabulary] -->|Add eligible matches if needed and tag weight is positive| Pool
+```
+
+</details>
 
 ### Turning a request into two vectors
 
